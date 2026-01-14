@@ -23,55 +23,55 @@ DETAILS_DIR = Path(__file__).parent / "details"
 DETAILS_DIR.mkdir(exist_ok=True)
 app.mount("/files", StaticFiles(directory=str(DETAILS_DIR)), name="files")
 
-# Sample detail metadata (replace with your actual 6 files)
+# Actual detail metadata
 DETAILS_METADATA = [
     {
         "id": "1",
-        "name": "Fire Extinguisher Cabinet - Version A",
-        "filename": "detail_1.pdf",
-        "project": "Building Alpha",
-        "scale": "1:20",
-        "description": "Standard wall-mounted fire extinguisher cabinet detail"
+        "name": "Accessible Water Closet - Multiple Accommodation (CBC 11A)",
+        "filename": "Sheet-001_ACCESSIBLE_WATER_CLOSET_MULTIPLE_ACCOMMODATION_ALT_(CBC_11A).pdf",
+        "project": "Accessibility Standards",
+        "scale": "Various",
+        "description": "Accessible water closet detail for multiple accommodation - Alternative design per CBC 11A"
     },
     {
         "id": "2",
-        "name": "Fire Extinguisher Cabinet - Version B",
-        "filename": "detail_2.pdf",
-        "project": "Building Beta",
-        "scale": "1:20",
-        "description": "Enhanced fire extinguisher cabinet with reinforced mounting"
+        "name": "Accessible Water Closet - Multiple Accommodation (Alt)",
+        "filename": "Sheet-ACCESSIBLE_WATER_CLOSET_MULTIPLE_ACCOMMODATION_ALT_(CBC_11A).pdf",
+        "project": "Accessibility Standards",
+        "scale": "Various",
+        "description": "Alternative accessible water closet configuration for multiple accommodation"
     },
     {
         "id": "3",
-        "name": "Window Head Detail - Type 1",
-        "filename": "detail_3.pdf",
-        "project": "Residential Complex",
-        "scale": "1:5",
-        "description": "Aluminum window head detail with thermal break"
+        "name": "Passenger Gurney Elevator Car",
+        "filename": "Sheet-430_PASSENGER_GURNEY_ELEVATOR_CAR.pdf",
+        "project": "Elevator Details",
+        "scale": "1:20",
+        "description": "Passenger gurney elevator car layout and dimensions"
     },
     {
         "id": "4",
-        "name": "Window Head Detail - Type 2",
-        "filename": "detail_4.pdf",
-        "project": "Office Tower",
-        "scale": "1:5",
-        "description": "Modified window head detail with improved waterproofing"
+        "name": "Shuttle Gurney Elevator Car",
+        "filename": "Sheet-430_SHUTTLE_GURNEY_ELEVATOR_CAR.pdf",
+        "project": "Elevator Details",
+        "scale": "1:20",
+        "description": "Shuttle gurney elevator car specifications and layout"
     },
     {
         "id": "5",
-        "name": "Wall Section - Exterior",
-        "filename": "detail_5.pdf",
-        "project": "Commercial Building",
-        "scale": "1:10",
-        "description": "Typical exterior wall section with insulation"
+        "name": "Fire Extinguisher Cabinet",
+        "filename": "Sheet-600_FIRE_EXTINGUISHER_CABINET.pdf",
+        "project": "Fire Safety",
+        "scale": "1:20",
+        "description": "Standard fire extinguisher cabinet mounting detail"
     },
     {
         "id": "6",
-        "name": "Wall Section - Exterior (Revised)",
-        "filename": "detail_6.pdf",
-        "project": "Commercial Building",
-        "scale": "1:10",
-        "description": "Revised exterior wall section with enhanced R-value"
+        "name": "Fire Extinguisher Cabinet - Version 2",
+        "filename": "Sheet-600_FIRE_EXTINGUISHER_CABINET_(2).pdf",
+        "project": "Fire Safety",
+        "scale": "1:20",
+        "description": "Alternative fire extinguisher cabinet configuration"
     }
 ]
 

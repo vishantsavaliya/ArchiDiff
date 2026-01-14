@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
-import { fabric } from 'fabric';
+import * as fabric from 'fabric';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,8 +27,8 @@ export default function ComparisonCanvas({
   const [opacity1, setOpacity1] = useState(70);
   const [opacity2, setOpacity2] = useState(70);
   const [loading, setLoading] = useState(false);
-  const image1Ref = useRef<fabric.Image | null>(null);
-  const image2Ref = useRef<fabric.Image | null>(null);
+  const image1Ref = useRef<fabric.FabricImage | null>(null);
+  const image2Ref = useRef<fabric.FabricImage | null>(null);
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -125,15 +125,9 @@ export default function ComparisonCanvas({
     }
   }, [detail2Color]);
 
-  const applyColorFilter = (image: fabric.Image, color: string) => {
-    // Convert hex color to RGB
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16) / 255;
-    const g = parseInt(hex.substr(2, 2), 16) / 255;
-    const b = parseInt(hex.substr(4, 2), 16) / 255;
-
-    // Apply color tint filter
-    const filter = new fabric.Image.filters.BlendColor({
+  const applyColorFilter = (image: fabric.FabricImage, color: string) => {
+    // Apply color tint filter using Fabric v7 API
+    const filter = new fabric.filters.BlendColor({
       color: color,
       mode: 'tint',
       alpha: 0.5,
@@ -141,7 +135,7 @@ export default function ComparisonCanvas({
 
     image.filters = [filter];
     image.applyFilters();
-    fabricCanvasRef.current?.requestRenderAll();
+    fabricCanvasRef.current?.renderAll();
   };
 
   const loadImages = async () => {
@@ -215,20 +209,18 @@ export default function ComparisonCanvas({
     }
   };
 
-  const loadImage = (url: string): Promise<fabric.Image> => {
-    return new Promise((resolve, reject) => {
-      fabric.Image.fromURL(
-        url,
-        (img) => {
-          if (img.width && img.height) {
-            resolve(img);
-          } else {
-            reject(new Error('Failed to load image'));
-          }
-        },
-        { crossOrigin: 'anonymous' }
-      );
-    });
+  const loadImage = async (url: string): Promise<fabric.FabricImage> => {
+    try {
+      const img = await fabric.FabricImage.fromURL(url, {
+        crossOrigin: 'anonymous'
+      });
+      if (img.width && img.height) {
+        return img;
+      }
+      throw new Error('Failed to load image');
+    } catch (error) {
+      throw new Error('Failed to load image');
+    }
   };
 
   const handleZoomIn = () => {

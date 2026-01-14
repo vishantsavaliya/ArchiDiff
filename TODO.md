@@ -3,17 +3,20 @@
 ## 🚨 Critical - Must Do Before Testing
 
 ### 1. Add Detail Files
+
 - [ ] Collect 6 architectural detail files (PDF, PNG, or JPG)
 - [ ] Place them in `backend/details/` directory
 - [ ] Name them clearly (e.g., `detail_1.pdf`, `detail_2.pdf`, etc.)
 
 ### 2. Update Backend Metadata
+
 - [ ] Open `backend/main.py`
 - [ ] Update `DETAILS_METADATA` array with actual file information
 - [ ] Ensure filenames match exactly (case-sensitive!)
 - [ ] Add accurate project names, scales, and descriptions
 
 ### 3. Set Up Backend Environment
+
 - [ ] Navigate to `backend/` directory
 - [ ] Create virtual environment: `python3 -m venv venv`
 - [ ] Activate venv: `source venv/bin/activate`
@@ -22,12 +25,14 @@
 - [ ] Verify: http://localhost:8000/api/health
 
 ### 4. Start Frontend
+
 - [ ] Navigate to `frontend/` directory (in new terminal)
 - [ ] Verify dependencies installed: `npm list` (should show no errors)
 - [ ] Start dev server: `npm run dev`
 - [ ] Open: http://localhost:3000
 
 ### 5. Initial Testing
+
 - [ ] Landing page loads correctly
 - [ ] Click "Start Comparing" navigates to `/compare`
 - [ ] Detail selectors show your 6 files
@@ -40,6 +45,7 @@
 ## 🎨 Optional - Nice to Have
 
 ### UI Improvements
+
 - [ ] Add logo/favicon
 - [ ] Add loading animations
 - [ ] Add keyboard shortcuts (e.g., R for reset)
@@ -47,6 +53,7 @@
 - [ ] Add comparison history (recent comparisons)
 
 ### Functionality
+
 - [ ] Add image alignment tools
 - [ ] Add measurement tools (rulers, angles)
 - [ ] Add annotation features (arrows, text)
@@ -54,6 +61,7 @@
 - [ ] Add side-by-side view option
 
 ### Documentation
+
 - [ ] Add screenshots to README
 - [ ] Create video demo
 - [ ] Add usage examples
@@ -63,6 +71,7 @@
 ## 🚀 Future Enhancements (Post-Portfolio)
 
 ### Phase 1 - Core Improvements
+
 - [ ] PDF.js integration for better PDF rendering
 - [ ] SVG export option
 - [ ] Comparison settings persistence (localStorage)
@@ -70,6 +79,7 @@
 - [ ] Keyboard navigation
 
 ### Phase 2 - Advanced Features
+
 - [ ] Auto-alignment using OpenCV
 - [ ] Difference detection and highlighting
 - [ ] Batch comparison (multiple pairs)
@@ -77,6 +87,7 @@
 - [ ] Print-friendly view
 
 ### Phase 3 - CAD Integration
+
 - [ ] DXF file parsing with ezdxf
 - [ ] DWG file support
 - [ ] Layer selection from CAD files
@@ -84,6 +95,7 @@
 - [ ] Coordinate system alignment
 
 ### Phase 4 - Collaboration
+
 - [ ] User authentication
 - [ ] Save comparisons to database
 - [ ] Share comparison links
@@ -91,6 +103,7 @@
 - [ ] Version control for details
 
 ### Phase 5 - AI Features
+
 - [ ] Similarity detection algorithm
 - [ ] Automatic feature matching
 - [ ] Smart suggestions for comparisons
@@ -100,18 +113,21 @@
 ## 🐛 Known Issues to Fix
 
 ### High Priority
+
 - [ ] Handle large file sizes (>10MB) gracefully
 - [ ] Improve PDF rendering quality
 - [ ] Add error boundary for canvas crashes
 - [ ] Fix mobile touch pan/zoom gestures
 
 ### Medium Priority
+
 - [ ] Add loading progress bars for large files
 - [ ] Improve color filter algorithm
 - [ ] Add undo/redo for view transformations
 - [ ] Cache loaded images for faster switching
 
 ### Low Priority
+
 - [ ] Add canvas grid/rulers
 - [ ] Add snap-to-grid functionality
 - [ ] Improve zoom animation smoothness
@@ -120,6 +136,7 @@
 ## 📱 Testing Checklist
 
 ### Browser Testing
+
 - [ ] Chrome (primary)
 - [ ] Firefox
 - [ ] Safari
@@ -128,12 +145,14 @@
 - [ ] Mobile Chrome (Android)
 
 ### Device Testing
+
 - [ ] Desktop (1920x1080)
 - [ ] Laptop (1440x900)
 - [ ] Tablet (768x1024)
 - [ ] Mobile (375x667)
 
 ### Feature Testing
+
 - [ ] All navigation links work
 - [ ] All API calls succeed
 - [ ] Error states display correctly
@@ -144,6 +163,7 @@
 ## 🎯 Portfolio Preparation
 
 ### Documentation
+
 - [ ] Take screenshots of landing page
 - [ ] Take screenshots of comparison in action
 - [ ] Record demo video (2-3 minutes)
@@ -151,6 +171,7 @@
 - [ ] Update personal portfolio website
 
 ### GitHub Polish
+
 - [ ] Clean up commit history
 - [ ] Add detailed README with screenshots
 - [ ] Add LICENSE file (MIT recommended)
@@ -159,6 +180,7 @@
 - [ ] Set up GitHub Pages for demo (optional)
 
 ### Demo Preparation
+
 - [ ] Prepare sample detail files (anonymized if needed)
 - [ ] Create demo script
 - [ ] Practice demo presentation
@@ -168,12 +190,14 @@
 ## 📊 Metrics to Track
 
 ### Performance
+
 - [ ] Page load time < 2 seconds
 - [ ] Time to first paint < 1 second
 - [ ] Canvas render time < 500ms
 - [ ] Export time < 2 seconds
 
 ### Code Quality
+
 - [ ] No TypeScript errors
 - [ ] No console warnings
 - [ ] All imports used
@@ -183,6 +207,7 @@
 ## 🎓 Learning Outcomes
 
 Document what you learned:
+
 - [ ] Next.js 14 App Router
 - [ ] TypeScript in React
 - [ ] FastAPI development
@@ -205,17 +230,20 @@ Document what you learned:
 ## ✅ Immediate Action Items (Start Here)
 
 **Today:**
+
 1. [ ] Add your 6 detail files to `backend/details/`
 2. [ ] Update `DETAILS_METADATA` in `backend/main.py`
 3. [ ] Start both servers and test
 
 **This Week:**
+
 1. [ ] Complete full testing checklist
 2. [ ] Fix any bugs found
 3. [ ] Take screenshots
 4. [ ] Record demo video
 
 **Next Week:**
+
 1. [ ] Deploy to production
 2. [ ] Add to portfolio website
 3. [ ] Share on LinkedIn/GitHub
@@ -223,7 +251,7 @@ Document what you learned:
 
 ---
 
-*Keep this file updated as you complete items!*
+_Keep this file updated as you complete items!_
 
 **Current Status:** Implementation Complete ✅  
 **Next Milestone:** Testing & Demo Preparation 🎯
