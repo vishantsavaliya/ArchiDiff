@@ -15,7 +15,7 @@ export default function ComparePage() {
   const [detail2Color, setDetail2Color] = useState('#3b82f6'); // Blue
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -25,10 +25,10 @@ export default function ComparePage() {
               Back to Home
             </Button>
           </Link>
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Compare <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Details</span>
+          <h1 className="text-4xl font-bold text-black mb-2">
+            Compare <span className="text-blue-600">Details</span>
           </h1>
-          <p className="text-gray-400">
+          <p className="text-gray-700">
             Select two architectural details to overlay and compare side-by-side
           </p>
         </div>

@@ -36,7 +36,7 @@ export default function ComparisonCanvas({
       const canvas = new fabric.Canvas(canvasRef.current, {
         width: 800,
         height: 600,
-        backgroundColor: '#1f2937',
+        backgroundColor: '#ffffff',
       });
       
       fabricCanvasRef.current = canvas;
@@ -147,7 +147,7 @@ export default function ComparisonCanvas({
     try {
       // Clear existing objects
       canvas.clear();
-      canvas.backgroundColor = '#1f2937';
+      canvas.backgroundColor = '#ffffff';
       image1Ref.current = null;
       image2Ref.current = null;
 
@@ -270,12 +270,12 @@ export default function ComparisonCanvas({
   return (
     <div className="space-y-4">
       {/* Canvas */}
-      <Card className="bg-gray-800/50 border-gray-700">
+      <Card className="bg-white border-gray-300">
         <CardContent className="p-6">
-          <div className="flex justify-center items-center bg-gray-900 rounded-lg overflow-hidden">
+          <div className="flex justify-center items-center bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-300">
             {!canvasReady ? (
               <div className="w-[800px] h-[600px] flex items-center justify-center">
-                <p className="text-gray-400 text-center">
+                <p className="text-gray-700 text-center text-lg font-semibold">
                   Select two details to compare
                 </p>
               </div>
@@ -283,7 +283,7 @@ export default function ComparisonCanvas({
               <div className="w-[800px] h-[600px] flex items-center justify-center">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                  <p className="text-gray-400">Loading details...</p>
+                  <p className="text-gray-700">Loading details...</p>
                 </div>
               </div>
             ) : (
@@ -295,12 +295,12 @@ export default function ComparisonCanvas({
 
       {/* Controls */}
       {canvasReady && (
-        <Card className="bg-gray-800/50 border-gray-700">
+        <Card className="bg-white border-gray-300">
           <CardContent className="p-6 space-y-6">
             {/* Opacity Controls */}
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <label className="text-sm font-medium text-white mb-2 block">
+                <label className="text-sm font-medium text-black mb-2 block">
                   Detail 1 Opacity: {opacity1}%
                 </label>
                 <Slider
@@ -313,7 +313,7 @@ export default function ComparisonCanvas({
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-white mb-2 block">
+                <label className="text-sm font-medium text-black mb-2 block">
                   Detail 2 Opacity: {opacity2}%
                 </label>
                 <Slider
@@ -347,7 +347,7 @@ export default function ComparisonCanvas({
               </Button>
             </div>
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600">
               💡 Tip: Hold Alt and drag to pan. Use mouse wheel to zoom.
             </p>
           </CardContent>

@@ -67,6 +67,10 @@ export async function fetchDetailById(detailId: string): Promise<Detail> {
  * Get the URL for a detail file
  */
 export function getDetailFileUrl(filename: string): string {
+  // Check if it's a PDF, if so use the PDF-to-image endpoint
+  if (filename.toLowerCase().endsWith('.pdf')) {
+    return `${API_BASE_URL}/api/pdf-to-image/${filename}?page=0`;
+  }
   return `${API_BASE_URL}/files/${filename}`;
 }
 

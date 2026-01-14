@@ -1,11 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pathlib import Path
 import json
 from typing import List, Dict
 import os
+from PIL import Image
+import io
+import fitz  # PyMuPDF
 
 app = FastAPI(title="ArchiBoost Compare API", version="1.0.0")
 
@@ -160,6 +163,41 @@ async def health_check():
         "files_present": len(list(DETAILS_DIR.glob("*"))),
         "details_dir": str(DETAILS_DIR)
     }
+
+
+@app.get("/api/pdf-to-image/{filename}")
+async def pdf_to_image(filename: str, page: int = 0):
+    """Convert PDF to image for canvas display"""
+    file_path = DETAILS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        # Open PDF
+        pdf_document = fitz.open(str(file_path))
+        
+        # Get the specified page (default to first page)
+        if page >= len(pdf_document):
+            page = 0
+            
+        pdf_page = pdf_document[page]
+        
+        # Render page to image at high resolution
+        mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
+        pix = pdf_page.get_pixmap(matrix=mat)
+        
+        # Convert to PIL Image
+        img_data = pix.tobytes("png")
+        
+        # Return as streaming response
+        return StreamingResponse(
+            io.BytesIO(img_data),
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to convert PDF: {str(e)}")
 
 
 if __name__ == "__main__":

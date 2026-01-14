@@ -66,13 +66,13 @@ export default function DetailSelector({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{label}</h3>
+      <h3 className="text-lg font-semibold text-black">{label}</h3>
       
       {availableDetails.length === 0 ? (
-        <Card className="bg-gray-800/50 border-gray-700">
+        <Card className="bg-gray-100 border-gray-300">
           <CardContent className="pt-6">
-            <p className="text-gray-400 text-center">
-              No details available. Add detail files to <code className="text-blue-400">backend/details/</code>
+            <p className="text-gray-700 text-center">
+              No details available. Add detail files to <code className="text-blue-600">backend/details/</code>
             </p>
           </CardContent>
         </Card>
@@ -86,24 +86,24 @@ export default function DetailSelector({
                 key={detail.id}
                 className={`cursor-pointer transition-all duration-200 border-2 ${
                   isSelected
-                    ? 'bg-blue-900/30 border-blue-500 ring-2 ring-blue-500'
-                    : 'bg-gray-800/50 border-gray-700 hover:border-gray-600 hover:bg-gray-800'
+                    ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500'
+                    : 'bg-white border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                 }`}
                 onClick={() => onSelectDetail(detail)}
               >
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-white leading-tight">
+                  <CardTitle className="text-base text-black leading-tight">
                     {detail.name}
                   </CardTitle>
-                  <CardDescription className="text-xs text-gray-400">
+                  <CardDescription className="text-xs text-gray-600">
                     {detail.project}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  <p className="text-sm text-gray-300">
-                    <span className="text-gray-500">Scale:</span> {detail.scale}
+                  <p className="text-sm text-gray-800">
+                    <span className="text-gray-600">Scale:</span> {detail.scale}
                   </p>
-                  <p className="text-xs text-gray-400 line-clamp-2">
+                  <p className="text-xs text-gray-600 line-clamp-2">
                     {detail.description}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
