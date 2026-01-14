@@ -17,6 +17,7 @@ from skimage.transform import AffineTransform, warp
 from skimage.color import rgb2gray
 from skimage.morphology import skeletonize, medial_axis
 from skimage.filters import threshold_otsu
+from controlnet_aux import MLSDdetector
 
 app = FastAPI(title="ArchiBoost Compare API", version="1.0.0")
 
@@ -606,6 +607,207 @@ async def create_overlay(file1: str, file2: str, color1: str = "green", color2: 
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Overlay creation failed: {str(e)}")
+
+
+# Initialize M-LSD detector (lazy loading to save memory)
+mlsd_detector = None
+
+def get_mlsd_detector():
+    """Lazy load M-LSD detector"""
+    global mlsd_detector
+    if mlsd_detector is None:
+        mlsd_detector = MLSDdetector.from_pretrained('lllyasviel/ControlNet')
+    return mlsd_detector
+
+
+@app.get("/api/mlsd/{filename}")
+async def detect_lines_mlsd(filename: str, page: int = 0, score_threshold: float = 0.1, distance_threshold: float = 20.0):
+    """
+    Use M-LSD (Mobile Line Segment Detection) to detect straight lines in architectural drawings.
+    This is a Deep Learning model that's superior to traditional methods for messy/scanned drawings.
+    
+    Args:
+        filename: PDF filename
+        page: PDF page number (default: 0)
+        score_threshold: Line confidence threshold 0-1 (default: 0.1 = detect more lines)
+        distance_threshold: Minimum line length in pixels (default: 20.0)
+    
+    Returns:
+        Image with detected line segments drawn
+    """
+    file_path = DETAILS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        # Extract PDF at high resolution
+        pdf_document = fitz.open(str(file_path))
+        
+        if page >= len(pdf_document):
+            page = 0
+            
+        pdf_page = pdf_document[page]
+        
+        # Render at 300 DPI for M-LSD
+        mat = fitz.Matrix(3.0, 3.0)
+        pix = pdf_page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Convert to PIL Image
+        img_data = pix.tobytes("png")
+        pil_image = Image.open(io.BytesIO(img_data))
+        
+        # Load M-LSD detector
+        detector = get_mlsd_detector()
+        
+        # Detect lines (returns image with lines drawn)
+        # detect_resolution: input resolution for model (512 is standard)
+        # image_resolution: output resolution (keep original)
+        result = detector(
+            pil_image,
+            thr_v=score_threshold,
+            thr_d=distance_threshold,
+            detect_resolution=512,
+            image_resolution=max(pil_image.size)
+        )
+        
+        # Convert PIL image to bytes
+        buffer = io.BytesIO()
+        result.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        pdf_document.close()
+        
+        return StreamingResponse(
+            buffer,
+            media_type="image/png",
+            headers={
+                "X-Model": "M-LSD",
+                "X-Score-Threshold": str(score_threshold),
+                "X-Distance-Threshold": str(distance_threshold),
+                "X-DPI": "300"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-LSD detection failed: {str(e)}")
+
+
+@app.get("/api/mlsd-overlay/{file1}/{file2}")
+async def mlsd_overlay(
+    file1: str, 
+    file2: str, 
+    color1: str = "green", 
+    color2: str = "pink",
+    score_threshold: float = 0.1,
+    distance_threshold: float = 20.0
+):
+    """
+    Create overlay using M-LSD detected lines instead of skeletonization.
+    Best for scanned or messy drawings where traditional methods struggle.
+    
+    Args:
+        file1: First PDF filename
+        file2: Second PDF filename
+        color1: Color for first detail (default: green)
+        color2: Color for second detail (default: pink)
+        score_threshold: Line confidence threshold (default: 0.1)
+        distance_threshold: Minimum line length (default: 20.0)
+    """
+    try:
+        colors = {
+            "green": (0, 255, 0),
+            "red": (255, 0, 0),
+            "blue": (0, 0, 255),
+            "pink": (255, 100, 150),
+            "cyan": (0, 255, 255),
+            "yellow": (255, 255, 0)
+        }
+        
+        c1 = colors.get(color1.lower(), (0, 255, 0))
+        c2 = colors.get(color2.lower(), (255, 100, 150))
+        
+        file1_path = DETAILS_DIR / file1
+        file2_path = DETAILS_DIR / file2
+        
+        if not file1_path.exists() or not file2_path.exists():
+            raise HTTPException(status_code=404, detail="One or both files not found")
+        
+        # Load M-LSD detector
+        detector = get_mlsd_detector()
+        
+        def extract_mlsd_lines(file_path):
+            """Extract lines using M-LSD"""
+            pdf_doc = fitz.open(str(file_path))
+            page = pdf_doc[0]
+            
+            # Extract at 300 DPI
+            mat = fitz.Matrix(3.0, 3.0)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            
+            img_data = pix.tobytes("png")
+            pil_image = Image.open(io.BytesIO(img_data))
+            
+            # Detect lines
+            result = detector(
+                pil_image,
+                thr_v=score_threshold,
+                thr_d=distance_threshold,
+                detect_resolution=512,
+                image_resolution=max(pil_image.size)
+            )
+            
+            # Convert to numpy array (grayscale)
+            lines_img = np.array(result.convert('L'))
+            
+            pdf_doc.close()
+            return lines_img
+        
+        lines1 = extract_mlsd_lines(file1_path)
+        lines2 = extract_mlsd_lines(file2_path)
+        
+        # Ensure same dimensions
+        if lines1.shape != lines2.shape:
+            height = max(lines1.shape[0], lines2.shape[0])
+            width = max(lines1.shape[1], lines2.shape[1])
+            
+            if lines1.shape != (height, width):
+                lines1 = cv2.resize(lines1, (width, height))
+            if lines2.shape != (height, width):
+                lines2 = cv2.resize(lines2, (width, height))
+        
+        # Create colored versions
+        color_img1 = np.ones((lines1.shape[0], lines1.shape[1], 3), dtype=np.uint8) * 255
+        color_img2 = np.ones((lines2.shape[0], lines2.shape[1], 3), dtype=np.uint8) * 255
+        
+        # Apply colors where lines exist (dark pixels)
+        mask1 = lines1 < 128
+        mask2 = lines2 < 128
+        
+        color_img1[mask1] = c1
+        color_img2[mask2] = c2
+        
+        # Overlay
+        overlay = cv2.addWeighted(color_img1, 0.5, color_img2, 0.5, 0)
+        
+        # Encode
+        is_success, buffer = cv2.imencode(".png", overlay)
+        if not is_success:
+            raise Exception("Failed to encode overlay")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "X-Model": "M-LSD",
+                "X-Color1": color1,
+                "X-Color2": color2,
+                "X-Processing": "mlsd-overlay"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-LSD overlay failed: {str(e)}")
 
 
 if __name__ == "__main__":
