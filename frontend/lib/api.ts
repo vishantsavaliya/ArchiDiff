@@ -64,14 +64,28 @@ export async function fetchDetailById(detailId: string): Promise<Detail> {
 }
 
 /**
- * Get the URL for a detail file
+ * Get the URL for a detail file.
+ * Can choose between different processing modes:
+ * - 'standard': Basic PDF to PNG conversion (2x resolution)
+ * - 'skeleton': Skeletonized version with 1-pixel centerlines (4x resolution)
  */
-export function getDetailFileUrl(filename: string): string {
-  // Check if it's a PDF, if so use the PDF-to-image endpoint
+export function getDetailFileUrl(filename: string, mode: 'standard' | 'skeleton' = 'skeleton'): string {
+  // Check if it's a PDF, if so use appropriate endpoint
   if (filename.toLowerCase().endsWith('.pdf')) {
+    if (mode === 'skeleton') {
+      // Use professional skeletonization for clean single-pixel lines
+      return `${API_BASE_URL}/api/skeletonize/${filename}?page=0`;
+    }
     return `${API_BASE_URL}/api/pdf-to-image/${filename}?page=0`;
   }
   return `${API_BASE_URL}/files/${filename}`;
+}
+
+/**
+ * Get URL for professional overlay with color-coded skeletons
+ */
+export function getOverlayUrl(file1: string, file2: string, color1: string = 'green', color2: string = 'pink'): string {
+  return `${API_BASE_URL}/api/overlay/${file1}/${file2}?color1=${color1}&color2=${color2}`;
 }
 
 /**
@@ -111,4 +125,56 @@ export async function checkHealth(): Promise<boolean> {
     console.error('Backend health check failed:', error);
     return false;
   }
+}
+
+/**
+ * SSIM Comparison Response
+ */
+export interface SSIMResult {
+  similarity_score: number;
+  similarity_percent: number;
+  difference_area_percent: number;
+  is_similar: boolean;
+  status: 'identical' | 'very_similar' | 'similar' | 'different';
+  dimensions: {
+    width: number;
+    height: number;
+  };
+}
+
+/**
+ * Compare two drawings using Structural Similarity Index (SSIM)
+ * Returns mathematical similarity score and analysis
+ */
+export async function compareSSIM(file1: string, file2: string): Promise<SSIMResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/compare-ssim/${encodeURIComponent(file1)}/${encodeURIComponent(file2)}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`SSIM comparison failed: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error comparing drawings:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate difference heatmap between two drawings
+ * Returns URL to visualize where differences are located
+ */
+export function getHeatmapUrl(file1: string, file2: string): string {
+  return `${API_BASE_URL}/api/heatmap/${encodeURIComponent(file1)}/${encodeURIComponent(file2)}`;
+}
+
+/**
+ * Get auto-aligned version of file2 to match file1
+ * Uses ORB feature matching for automatic alignment
+ */
+export function getAlignedImageUrl(file1: string, file2: string): string {
+  return `${API_BASE_URL}/api/align/${encodeURIComponent(file1)}/${encodeURIComponent(file2)}`;
 }

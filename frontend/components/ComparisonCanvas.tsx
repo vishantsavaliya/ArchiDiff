@@ -5,9 +5,9 @@ import * as fabric from 'fabric';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent } from '@/components/ui/card';
-import { getDetailFileUrl } from '@/lib/api';
+import { getDetailFileUrl, compareSSIM, getHeatmapUrl, SSIMResult } from '@/lib/api';
 import { toast } from 'sonner';
-import { Download, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, RotateCcw, ZoomIn, ZoomOut, Scan } from 'lucide-react';
 
 interface ComparisonCanvasProps {
   detail1Filename: string | null;
@@ -29,6 +29,9 @@ export default function ComparisonCanvas({
   const [loading, setLoading] = useState(false);
   const image1Ref = useRef<fabric.FabricImage | null>(null);
   const image2Ref = useRef<fabric.FabricImage | null>(null);
+  const [ssimResult, setSSIMResult] = useState<SSIMResult | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [analyzingSSIM, setAnalyzingSSIM] = useState(false);
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -154,11 +157,18 @@ export default function ComparisonCanvas({
       const url1 = getDetailFileUrl(detail1Filename);
       const url2 = getDetailFileUrl(detail2Filename);
 
+      console.log('Loading images from:', { url1, url2 });
+
       // Load both images
       const [img1, img2] = await Promise.all([
         loadImage(url1),
         loadImage(url2),
       ]);
+
+      console.log('Images loaded successfully:', {
+        img1: { width: img1.width, height: img1.height },
+        img2: { width: img2.width, height: img2.height }
+      });
 
       // Scale images to fit canvas
       const scale1 = Math.min(
@@ -201,11 +211,71 @@ export default function ComparisonCanvas({
 
       canvas.requestRenderAll();
       toast.success('Details loaded successfully');
+      
+      // Automatically analyze similarity after images finish loading
+      setTimeout(() => analyzeSSIM(), 500);
     } catch (error) {
       console.error('Error loading images:', error);
       toast.error('Failed to load detail files. Make sure backend is running.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Analyze SSIM similarity
+  const analyzeSSIM = async () => {
+    if (!detail1Filename || !detail2Filename) return;
+    
+    setAnalyzingSSIM(true);
+    try {
+      const result = await compareSSIM(detail1Filename, detail2Filename);
+      setSSIMResult(result);
+      
+      // Show toast based on similarity
+      if (result.status === 'identical') {
+        toast.success(`Drawings are ${result.similarity_percent}% identical!`);
+      } else if (result.status === 'very_similar') {
+        toast.info(`Drawings are ${result.similarity_percent}% similar`);
+      } else if (result.status === 'similar') {
+        toast.warning(`Drawings have ${result.similarity_percent}% similarity`);
+      } else {
+        toast.error(`Drawings are significantly different (${result.similarity_percent}% similar)`);
+      }
+    } catch (error) {
+      console.error('SSIM analysis failed:', error);
+      // Don't show error toast - SSIM is optional feature
+    } finally {
+      setAnalyzingSSIM(false);
+    }
+  };
+
+  const toggleHeatmap = () => {
+    if (!detail1Filename || !detail2Filename) return;
+    setShowHeatmap(!showHeatmap);
+    
+    if (!showHeatmap) {
+      // Load heatmap
+      const canvas = fabricCanvasRef.current;
+      if (!canvas) return;
+      
+      canvas.clear();
+      const heatmapUrl = getHeatmapUrl(detail1Filename, detail2Filename);
+      
+      fabric.FabricImage.fromURL(heatmapUrl, (img) => {
+        img.set({
+          left: canvas.width! / 2,
+          top: canvas.height! / 2,
+          originX: 'center',
+          originY: 'center',
+        });
+        canvas.add(img);
+        canvas.renderAll();
+      });
+      
+      toast.info('Showing difference heatmap');
+    } else {
+      // Reload normal comparison
+      loadImages();
     }
   };
 
@@ -327,6 +397,40 @@ export default function ComparisonCanvas({
               </div>
             </div>
 
+            {/* SSIM Analysis Results */}
+            {ssimResult && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-black mb-2">Similarity Analysis (SSIM)</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Similarity Score</p>
+                    <p className="text-xl font-bold text-black">{ssimResult.similarity_percent}%</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Status</p>
+                    <p className={`text-sm font-medium ${
+                      ssimResult.status === 'identical' ? 'text-green-600' :
+                      ssimResult.status === 'very_similar' ? 'text-blue-600' :
+                      ssimResult.status === 'similar' ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      {ssimResult.status.replace('_', ' ').toUpperCase()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Different Area</p>
+                    <p className="text-sm font-semibold text-black">{ssimResult.difference_area_percent.toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Resolution</p>
+                    <p className="text-sm font-semibold text-black">
+                      {ssimResult.dimensions.width} × {ssimResult.dimensions.height}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
               <Button onClick={handleZoomIn} variant="outline" size="sm">
@@ -341,6 +445,15 @@ export default function ComparisonCanvas({
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Reset View
               </Button>
+              <Button 
+                onClick={toggleHeatmap} 
+                variant={showHeatmap ? "default" : "outline"} 
+                size="sm"
+                disabled={analyzingSSIM}
+              >
+                <Scan className="mr-2 h-4 w-4" />
+                {showHeatmap ? 'Hide Heatmap' : 'Show Heatmap'}
+              </Button>
               <Button onClick={handleExport} className="ml-auto" size="sm">
                 <Download className="mr-2 h-4 w-4" />
                 Export PNG
@@ -348,7 +461,7 @@ export default function ComparisonCanvas({
             </div>
 
             <p className="text-xs text-gray-600">
-              💡 Tip: Hold Alt and drag to pan. Use mouse wheel to zoom.
+              💡 Tip: Hold Alt and drag to pan. Use mouse wheel to zoom. Click "Show Heatmap" to see mathematical difference analysis.
             </p>
           </CardContent>
         </Card>

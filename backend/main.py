@@ -9,6 +9,14 @@ import os
 from PIL import Image
 import io
 import fitz  # PyMuPDF
+import cv2
+import numpy as np
+from skimage.metrics import structural_similarity as ssim
+from skimage.feature import ORB, match_descriptors
+from skimage.transform import AffineTransform, warp
+from skimage.color import rgb2gray
+from skimage.morphology import skeletonize, medial_axis
+from skimage.filters import threshold_otsu
 
 app = FastAPI(title="ArchiBoost Compare API", version="1.0.0")
 
@@ -25,6 +33,20 @@ app.add_middleware(
 DETAILS_DIR = Path(__file__).parent / "details"
 DETAILS_DIR.mkdir(exist_ok=True)
 app.mount("/files", StaticFiles(directory=str(DETAILS_DIR)), name="files")
+
+# Create heatmap directory
+HEATMAP_DIR = Path(__file__).parent / "heatmaps"
+HEATMAP_DIR.mkdir(exist_ok=True)
+
+# Mount converted images directory
+CONVERTED_DIR = Path(__file__).parent / "converted_images" / "outlines_detailed"
+
+# Helper function to convert PDF filenames to PNG
+def get_outline_filename(filename: str) -> str:
+    """Convert PDF filename to corresponding outline PNG filename"""
+    if filename.endswith('.pdf'):
+        return filename.replace('.pdf', '.png')
+    return filename
 
 # Actual detail metadata
 DETAILS_METADATA = [
@@ -198,6 +220,392 @@ async def pdf_to_image(filename: str, page: int = 0):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to convert PDF: {str(e)}")
+
+
+@app.get("/api/compare-ssim/{file1}/{file2}")
+async def compare_ssim(file1: str, file2: str):
+    """
+    Calculate Structural Similarity Index (SSIM) between two architectural drawings.
+    Returns similarity score (0-1, where 1 is identical) and region analysis.
+    """
+    try:
+        # Convert PDF filenames to PNG if needed
+        png_file1 = get_outline_filename(file1)
+        png_file2 = get_outline_filename(file2)
+        
+        # Load outline images
+        img1_path = CONVERTED_DIR / png_file1
+        img2_path = CONVERTED_DIR / png_file2
+        
+        if not img1_path.exists() or not img2_path.exists():
+            raise HTTPException(status_code=404, detail=f"Outline images not found: {png_file1}, {png_file2}")
+        
+        # Read images
+        img1 = cv2.imread(str(img1_path))
+        img2 = cv2.imread(str(img2_path))
+        
+        # Convert to grayscale
+        gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+        
+        # Resize to same dimensions (use smaller as reference)
+        h = min(gray1.shape[0], gray2.shape[0])
+        w = min(gray1.shape[1], gray2.shape[1])
+        gray1_resized = cv2.resize(gray1, (w, h))
+        gray2_resized = cv2.resize(gray2, (w, h))
+        
+        # Calculate SSIM
+        score, diff_image = ssim(gray1_resized, gray2_resized, full=True)
+        
+        # Convert difference image to percentage
+        diff_percent = (1.0 - diff_image) * 100
+        
+        # Find regions with significant differences (>20% difference)
+        significant_diff = np.where(diff_percent > 20)
+        num_different_pixels = len(significant_diff[0])
+        total_pixels = w * h
+        diff_area_percent = (num_different_pixels / total_pixels) * 100
+        
+        return {
+            "similarity_score": float(score),
+            "similarity_percent": round(score * 100, 2),
+            "difference_area_percent": round(diff_area_percent, 2),
+            "is_similar": bool(score > 0.90),
+            "status": "identical" if score > 0.98 else "very_similar" if score > 0.90 else "similar" if score > 0.70 else "different",
+            "dimensions": {
+                "width": int(w),
+                "height": int(h)
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SSIM comparison failed: {str(e)}")
+
+
+@app.get("/api/heatmap/{file1}/{file2}")
+async def generate_heatmap(file1: str, file2: str):
+    """
+    Generate a visual heatmap showing WHERE the differences are between two drawings.
+    Red = high difference, Blue = identical, Green/Yellow = moderate difference.
+    """
+    try:
+        # Convert PDF filenames to PNG if needed
+        png_file1 = get_outline_filename(file1)
+        png_file2 = get_outline_filename(file2)
+        
+        # Load outline images
+        img1_path = CONVERTED_DIR / png_file1
+        img2_path = CONVERTED_DIR / png_file2
+        
+        if not img1_path.exists() or not img2_path.exists():
+            raise HTTPException(status_code=404, detail=f"Outline images not found: {png_file1}, {png_file2}")
+        
+        # Read images
+        img1 = cv2.imread(str(img1_path))
+        img2 = cv2.imread(str(img2_path))
+        
+        # Convert to grayscale
+        gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+        
+        # Resize to same dimensions
+        h = min(gray1.shape[0], gray2.shape[0])
+        w = min(gray1.shape[1], gray2.shape[1])
+        gray1_resized = cv2.resize(gray1, (w, h))
+        gray2_resized = cv2.resize(gray2, (w, h))
+        
+        # Calculate SSIM with full difference map
+        score, diff_image = ssim(gray1_resized, gray2_resized, full=True)
+        
+        # Convert to difference percentage (0-100)
+        diff_image = ((1.0 - diff_image) * 255).astype("uint8")
+        
+        # Apply colormap (COLORMAP_JET: blue=similar, red=different)
+        heatmap = cv2.applyColorMap(diff_image, cv2.COLORMAP_JET)
+        
+        # Blend with original image for context
+        alpha = 0.6
+        img1_resized = cv2.resize(img1, (w, h))
+        blended = cv2.addWeighted(img1_resized, 1-alpha, heatmap, alpha, 0)
+        
+        # Save heatmap
+        output_filename = f"heatmap_{file1.replace('.png', '')}_{file2.replace('.png', '')}.png"
+        output_path = HEATMAP_DIR / output_filename
+        cv2.imwrite(str(output_path), blended)
+        
+        # Convert to PNG bytes for streaming
+        is_success, buffer = cv2.imencode(".png", blended)
+        if not is_success:
+            raise Exception("Failed to encode heatmap")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "X-Similarity-Score": str(round(score * 100, 2))
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Heatmap generation failed: {str(e)}")
+
+
+@app.get("/api/align/{file1}/{file2}")
+async def auto_align(file1: str, file2: str):
+    """
+    Automatically align two drawings using ORB feature matching.
+    Returns the aligned version of file2 to match file1's orientation/scale.
+    """
+    try:
+        # Convert PDF filenames to PNG if needed
+        png_file1 = get_outline_filename(file1)
+        png_file2 = get_outline_filename(file2)
+        
+        # Load outline images
+        img1_path = CONVERTED_DIR / png_file1
+        img2_path = CONVERTED_DIR / png_file2
+        
+        if not img1_path.exists() or not img2_path.exists():
+            raise HTTPException(status_code=404, detail=f"Outline images not found: {png_file1}, {png_file2}")
+        
+        # Read images
+        img1 = cv2.imread(str(img1_path))
+        img2 = cv2.imread(str(img2_path))
+        
+        # Convert to grayscale
+        gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+        
+        # Detect ORB features
+        orb = cv2.ORB_create(nfeatures=1000)
+        kp1, des1 = orb.detectAndCompute(gray1, None)
+        kp2, des2 = orb.detectAndCompute(gray2, None)
+        
+        if des1 is None or des2 is None:
+            raise HTTPException(status_code=400, detail="Not enough features detected for alignment")
+        
+        # Match features using BFMatcher
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = bf.match(des1, des2)
+        
+        # Sort matches by distance (best matches first)
+        matches = sorted(matches, key=lambda x: x.distance)
+        
+        # Use top 50 matches
+        good_matches = matches[:min(50, len(matches))]
+        
+        if len(good_matches) < 10:
+            raise HTTPException(status_code=400, detail="Not enough good matches found for alignment")
+        
+        # Extract matched keypoints
+        src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        
+        # Find homography matrix
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        
+        # Warp img2 to align with img1
+        h, w = gray1.shape
+        aligned = cv2.warpPerspective(img2, M, (w, h))
+        
+        # Convert to PNG bytes
+        is_success, buffer = cv2.imencode(".png", aligned)
+        if not is_success:
+            raise Exception("Failed to encode aligned image")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "X-Matches-Found": str(len(good_matches)),
+                "X-Alignment-Success": "true"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Alignment failed: {str(e)}")
+
+
+@app.get("/api/skeletonize/{filename}")
+async def skeletonize_drawing(filename: str, page: int = 0):
+    """
+    Extract PDF at high resolution and create a clean 1-pixel skeleton.
+    This is the "founding engineer" approach for architectural drawings.
+    
+    Steps:
+    1. Extract PDF at 400 DPI for maximum detail
+    2. Convert to binary using Otsu thresholding
+    3. Apply morphological skeletonization for single-pixel centerlines
+    4. Return clean skeleton as PNG
+    """
+    file_path = DETAILS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        # Step A: Extract High-Resolution Paths
+        pdf_document = fitz.open(str(file_path))
+        
+        if page >= len(pdf_document):
+            page = 0
+            
+        pdf_page = pdf_document[page]
+        
+        # Render at 400 DPI (4x zoom) for maximum detail
+        mat = fitz.Matrix(4.0, 4.0)
+        pix = pdf_page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Convert to numpy array
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        
+        # Step B: Skeletonization - The Key to Clean Lines
+        # Invert so that lines are white on black background
+        inverted = cv2.bitwise_not(gray)
+        
+        # Apply Otsu's thresholding for automatic binary conversion
+        thresh_value = threshold_otsu(inverted)
+        binary = inverted > thresh_value
+        
+        # Skeletonize - reduces all structures to 1-pixel centerlines
+        skeleton = skeletonize(binary)
+        
+        # Convert boolean skeleton to uint8 image
+        skeleton_img = (skeleton * 255).astype(np.uint8)
+        
+        # Invert back so skeleton is black on white
+        skeleton_img = cv2.bitwise_not(skeleton_img)
+        
+        # Encode as PNG
+        is_success, buffer = cv2.imencode(".png", skeleton_img)
+        if not is_success:
+            raise Exception("Failed to encode skeleton image")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "X-DPI": "400",
+                "X-Processing": "skeletonized",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Skeletonization failed: {str(e)}")
+
+
+@app.get("/api/overlay/{file1}/{file2}")
+async def create_overlay(file1: str, file2: str, color1: str = "green", color2: str = "pink"):
+    """
+    Step C: Create professional pink/green overlay of two skeletonized drawings.
+    
+    This uses the founding engineer workflow:
+    - Extract skeletons for both PDFs
+    - Color Detail 1 as green (0, 255, 0)
+    - Color Detail 2 as red/pink (255, 100, 150)
+    - Overlay with addWeighted so overlaps blend and differences pop
+    
+    Args:
+        file1: First PDF filename
+        file2: Second PDF filename  
+        color1: Color for first detail (green/red/blue)
+        color2: Color for second detail (green/red/blue/pink)
+    """
+    try:
+        # Define color mappings
+        colors = {
+            "green": (0, 255, 0),
+            "red": (255, 0, 0),
+            "blue": (0, 0, 255),
+            "pink": (255, 100, 150),
+            "cyan": (0, 255, 255),
+            "yellow": (255, 255, 0)
+        }
+        
+        c1 = colors.get(color1.lower(), (0, 255, 0))
+        c2 = colors.get(color2.lower(), (255, 100, 150))
+        
+        # Load both PDFs
+        file1_path = DETAILS_DIR / file1
+        file2_path = DETAILS_DIR / file2
+        
+        if not file1_path.exists() or not file2_path.exists():
+            raise HTTPException(status_code=404, detail="One or both files not found")
+        
+        # Extract and skeletonize both drawings
+        def extract_skeleton(file_path):
+            pdf_doc = fitz.open(str(file_path))
+            page = pdf_doc[0]
+            
+            # High resolution extraction
+            mat = fitz.Matrix(4.0, 4.0)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+            
+            # Skeletonize
+            inverted = cv2.bitwise_not(gray)
+            thresh_value = threshold_otsu(inverted)
+            binary = inverted > thresh_value
+            skeleton = skeletonize(binary)
+            skeleton_img = (skeleton * 255).astype(np.uint8)
+            
+            pdf_doc.close()
+            return skeleton_img
+        
+        skeleton1 = extract_skeleton(file1_path)
+        skeleton2 = extract_skeleton(file2_path)
+        
+        # Ensure same dimensions (resize if needed)
+        if skeleton1.shape != skeleton2.shape:
+            height = max(skeleton1.shape[0], skeleton2.shape[0])
+            width = max(skeleton1.shape[1], skeleton2.shape[1])
+            
+            if skeleton1.shape != (height, width):
+                skeleton1 = cv2.resize(skeleton1, (width, height))
+            if skeleton2.shape != (height, width):
+                skeleton2 = cv2.resize(skeleton2, (width, height))
+        
+        # Create colored versions
+        # Black pixels in skeleton are the structure (value 0)
+        # White background is value 255
+        
+        # Create color images
+        color_img1 = np.ones((skeleton1.shape[0], skeleton1.shape[1], 3), dtype=np.uint8) * 255
+        color_img2 = np.ones((skeleton2.shape[0], skeleton2.shape[1], 3), dtype=np.uint8) * 255
+        
+        # Apply colors to structure (where skeleton is black/dark)
+        mask1 = skeleton1 < 128
+        mask2 = skeleton2 < 128
+        
+        color_img1[mask1] = c1
+        color_img2[mask2] = c2
+        
+        # Overlay using addWeighted - where they overlap, colors blend
+        overlay = cv2.addWeighted(color_img1, 0.5, color_img2, 0.5, 0)
+        
+        # Encode as PNG
+        is_success, buffer = cv2.imencode(".png", overlay)
+        if not is_success:
+            raise Exception("Failed to encode overlay")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "X-Color1": color1,
+                "X-Color2": color2,
+                "X-Processing": "skeletonized-overlay"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Overlay creation failed: {str(e)}")
 
 
 if __name__ == "__main__":
