@@ -90,7 +90,7 @@ async def root():
 
 
 @app.get("/api/details")
-async def get_details() -> List[Dict]:
+async def get_details():
     """Get list of all available details"""
     # Check which files actually exist
     available_details = []
@@ -101,11 +101,11 @@ async def get_details() -> List[Dict]:
         detail_copy["url"] = f"/files/{detail['filename']}" if file_path.exists() else None
         available_details.append(detail_copy)
     
-    return available_details
+    return {"details": available_details}
 
 
 @app.get("/api/detail/{detail_id}")
-async def get_detail(detail_id: str) -> Dict:
+async def get_detail(detail_id: str):
     """Get specific detail information"""
     detail = next((d for d in DETAILS_METADATA if d["id"] == detail_id), None)
     
@@ -121,10 +121,12 @@ async def get_detail(detail_id: str) -> Dict:
         )
     
     return {
-        **detail,
-        "url": f"/files/{detail['filename']}",
-        "file_size": file_path.stat().st_size,
-        "exists": True
+        "detail": {
+            **detail,
+            "url": f"/files/{detail['filename']}",
+            "file_size": file_path.stat().st_size,
+            "exists": True
+        }
     }
 
 
