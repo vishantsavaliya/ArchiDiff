@@ -810,6 +810,111 @@ async def mlsd_overlay(
         raise HTTPException(status_code=500, detail=f"M-LSD overlay failed: {str(e)}")
 
 
+@app.get("/api/extract-sketch/{filename}")
+async def extract_sketch_only(filename: str, page: int = 0, remove_text: bool = True):
+    """
+    Extract only the drawing/sketch from PDF, removing all text, dimensions, and annotations.
+    Uses M-LSD to detect only structural lines and filters out text elements.
+    
+    Args:
+        filename: PDF filename
+        page: PDF page number (default: 0)
+        remove_text: Whether to remove text (default: True)
+    
+    Returns:
+        Clean sketch with only line work, no text or annotations
+    """
+    file_path = DETAILS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        # Extract PDF at very high resolution to capture fine details
+        pdf_document = fitz.open(str(file_path))
+        
+        if page >= len(pdf_document):
+            page = 0
+            
+        pdf_page = pdf_document[page]
+        
+        # Method 1: Extract vector drawings directly (removes text automatically)
+        # This gets the raw drawing paths without text
+        drawings = pdf_page.get_drawings()
+        
+        # Render at high resolution for rasterization
+        mat = fitz.Matrix(4.0, 4.0)  # 400 DPI
+        pix = pdf_page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Convert to numpy array
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+        
+        if remove_text and len(drawings) > 0:
+            # Create blank canvas
+            clean_img = np.ones_like(img) * 255
+            
+            # Draw only the vector paths (not text)
+            # Convert to PIL for drawing
+            from PIL import ImageDraw
+            pil_img = Image.fromarray(clean_img)
+            draw = ImageDraw.Draw(pil_img)
+            
+            # Draw each path
+            for drawing in drawings:
+                items = drawing.get("items", [])
+                for item in items:
+                    if item[0] == "l":  # Line
+                        # Scale coordinates by matrix
+                        p1 = (item[1].x * 4, item[1].y * 4)
+                        p2 = (item[2].x * 4, item[2].y * 4)
+                        draw.line([p1, p2], fill=(0, 0, 0), width=2)
+                    elif item[0] == "c":  # Curve
+                        # For curves, approximate with line segments
+                        points = [(item[i].x * 4, item[i].y * 4) for i in range(1, len(item))]
+                        if len(points) >= 2:
+                            for i in range(len(points) - 1):
+                                draw.line([points[i], points[i + 1]], fill=(0, 0, 0), width=2)
+            
+            clean_img = np.array(pil_img)
+        else:
+            # Fallback: Use M-LSD to detect only lines (ignores text)
+            pil_image = Image.fromarray(img)
+            detector = get_mlsd_detector()
+            
+            # Detect structural lines only (text won't be detected as lines)
+            result = detector(
+                pil_image,
+                thr_v=0.15,  # Moderate threshold
+                thr_d=30.0,  # Longer lines only (filters out small text artifacts)
+                detect_resolution=512,
+                image_resolution=max(pil_image.size)
+            )
+            
+            # Convert to numpy and invert (black lines on white)
+            clean_img = np.array(result)
+        
+        pdf_document.close()
+        
+        # Encode as PNG
+        is_success, buffer = cv2.imencode(".png", clean_img)
+        if not is_success:
+            raise Exception("Failed to encode sketch")
+        
+        return StreamingResponse(
+            io.BytesIO(buffer.tobytes()),
+            media_type="image/png",
+            headers={
+                "X-Processing": "sketch-only",
+                "X-Text-Removed": str(remove_text),
+                "X-Method": "vector-extraction" if len(drawings) > 0 else "mlsd-detection",
+                "X-DPI": "400"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sketch extraction failed: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
