@@ -9,3 +9,10 @@ easyocr
 torch
 torchvision
 
+# MobileSAM for lightweight interactive segmentation (~40MB model, 5-7x faster than SAM)
+mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git
+matplotlib
+
+# Flask for web interface
+flask
+

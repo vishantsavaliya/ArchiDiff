@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAM Annotation Remover</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        
+        .canvas-container {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+            overflow: auto;
+            max-height: calc(100vh - 150px);
+        }
+        
+        .canvas-container.grabbing {
+            cursor: grabbing !important;
+        }
+        
+        #imageCanvas {
+            max-width: none;
+            height: auto;
+            cursor: crosshair;
+            border: 2px solid #444;
+            border-radius: 4px;
+            display: block;
+            transition: transform 0.1s;
+            transform-origin: top left;
+        }
+        
+        #imageCanvas.panning {
+            cursor: grab;
+        }
+        
+        .controls {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 25px;
+        }
+        
+        .control-group h3 {
+            font-size: 14px;
+            color: #00ff88;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary {
+            background: #00ff88;
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            background: #00cc6d;
+        }
+        
+        .btn-danger {
+            background: #ff4444;
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: #cc0000;
+        }
+        
+        .btn-secondary {
+            background: #444;
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: #555;
+        }
+        
+        .btn-warning {
+            background: #ff8800;
+            color: #fff;
+        }
+        
+        .btn-warning:hover {
+            background: #cc6600;
+        }
+        
+        .status {
+            background: #1a1a1a;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .status-label {
+            color: #888;
+        }
+        
+        .status-value {
+            color: #00ff88;
+            font-weight: 600;
+        }
+        
+        .instructions {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        
+        .instructions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .instructions li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #00ff88;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 1000;
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .notification.success {
+            background: #00ff88;
+            color: #000;
+        }
+        
+        .notification.error {
+            background: #ff4444;
+            color: #fff;
+        }
+        
+        .zoom-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .kbd {
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 SAM Annotation Remover</h1>
+            <p class="subtitle">Click on arrows/annotations to select, then remove</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <img id="imageCanvas" alt="Drawing">
+            </div>
+            
+            <div class="controls">
+                <div class="status">
+                    <div class="status-item">
+                        <span class="status-label">Selected:</span>
+                        <span class="status-value" id="selectedCount">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Can Undo:</span>
+                        <span class="status-value" id="canUndo">No</span>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>View</h3>
+                    <div class="zoom-controls">
+                        <button class="btn btn-secondary" onclick="zoomIn()">Zoom In (+)</button>
+                        <button class="btn btn-secondary" onclick="zoomOut()">Zoom Out (-)</button>
+                        <button class="btn btn-secondary" onclick="fitToView()">Fit to View</button>
+                        <button class="btn btn-secondary" onclick="actualSize()">100%</button>
+                    </div>
+                    <div class="status-item" style="margin-top: 10px;">
+                        <span class="status-label">Zoom:</span>
+                        <span class="status-value" id="zoomLevel">100%</span>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>View Controls</h3>
+                    <div class="zoom-controls">
+                        <button class="btn btn-secondary" onclick="zoomIn()">+ Zoom In</button>
+                        <button class="btn btn-secondary" onclick="zoomOut()">- Zoom Out</button>
+                        <button class="btn btn-secondary" onclick="fitToView()">Fit to View</button>
+                        <button class="btn btn-secondary" onclick="actualSize()">100%</button>
+                    </div>
+                    <div class="status-item" style="margin-top: 10px; background: #1a1a1a; padding: 8px; border-radius: 4px;">
+                        <span class="status-label">Zoom:</span>
+                        <span class="status-value" id="zoomLevel">100%</span>
+                    </div>
+                    <p style="font-size: 11px; color: #666; margin-top: 8px;">
+                        <span class="kbd">Shift</span> + drag to pan<br>
+                        <span class="kbd">Ctrl</span> + scroll to zoom
+                    </p>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Prototype Matching</h3>
+                    <button class="btn-primary" onclick="setPrototypeMode()" id="prototypeBtn" style="margin-bottom: 10px;">
+                        🎯 Set Prototype (Click Object)
+                    </button>
+                    <button class="btn-success" onclick="findSimilar()" id="findBtn" disabled style="margin-bottom: 10px;">
+                        🔍 Find All Similar
+                    </button>
+                    <p style="font-size: 11px; color: #666; margin-top: 5px;">
+                        Click one arrow, then find all rotated copies
+                    </p>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Selection</h3>
+                    <button class="btn-secondary" onclick="autoDetect()" style="margin-bottom: 10px;">
+                        ✨ Auto-Detect (Old Method)
+                    </button>
+                    <button class="btn-secondary" onclick="undo()">
+                        ↶ Undo Selection <span class="kbd">Ctrl+Z</span>
+                    </button>
+                    <button class="btn-secondary" onclick="clear()">
+                        ✕ Clear All Selections
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Remove</h3>
+                    <button class="btn-danger" onclick="remove()">
+                        🗑 Delete Selected <span class="kbd">D</span>
+                    </button>
+                    <button class="btn-warning" onclick="undoRemove()">
+                        ↶ Undo Last Delete
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <h3>File</h3>
+                    <button class="btn-primary" onclick="save()">
+                        💾 Save Cleaned Image <span class="kbd">S</span>
+                    </button>
+                    <button class="btn-secondary" onclick="reset()">
+                        ⟲ Reset to Original
+                    </button>
+                </div>
+                
+                <div class="instructions">
+                    <h3 style="margin-bottom: 10px;">Instructions</h3>
+                    <ul>
+                        <li>Click on arrows/lines to select</li>
+                        <li>Selected items turn green</li>
+                        <li>Use Undo to deselect last item</li>
+                        <li>Press Delete to remove selected</li>
+                        <li>Save when done</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let selectedCount = 0;
+        let canUndo = false;
+        let zoomScale = 1.0;
+        let isPanning = false;
+        let startX, startY, scrollLeft, scrollTop;
+        let prototypeMode = false;  // For prototype matching
+        
+        const canvas = document.getElementById('imageCanvas');
+        const container = document.querySelector('.canvas-container');
+        
+        // Pan functionality
+        container.addEventListener('mousedown', (e) => {
+            if (e.target !== canvas) return;
+            if (e.shiftKey) {  // Only pan with shift key
+                isPanning = true;
+                container.classList.add('grabbing');
+                startX = e.pageX - container.offsetLeft;
+                startY = e.pageY - container.offsetTop;
+                scrollLeft = container.scrollLeft;
+                scrollTop = container.scrollTop;
+                e.preventDefault();
+            }
+        });
+        
+        container.addEventListener('mouseleave', () => {
+            isPanning = false;
+            container.classList.remove('grabbing');
+        });
+        
+        container.addEventListener('mouseup', () => {
+            isPanning = false;
+            container.classList.remove('grabbing');
+        });
+        
+        container.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            e.preventDefault();
+            const x = e.pageX - container.offsetLeft;
+            const y = e.pageY - container.offsetTop;
+            const walkX = (x - startX) * 2;
+            const walkY = (y - startY) * 2;
+            container.scrollLeft = scrollLeft - walkX;
+            container.scrollTop = scrollTop - walkY;
+        });
+        
+        // Zoom with mouse wheel
+        container.addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                zoomScale = Math.max(0.1, Math.min(5, zoomScale + delta));
+                updateZoom();
+            }
+        });
+        
+        function updateZoom() {
+            canvas.style.transform = `scale(${zoomScale})`;
+            document.getElementById('zoomLevel').textContent = Math.round(zoomScale * 100) + '%';
+        }
+        
+        function zoomIn() {
+            zoomScale = Math.min(5, zoomScale + 0.2);
+            updateZoom();
+        }
+        
+        function zoomOut() {
+            zoomScale = Math.max(0.1, zoomScale - 0.2);
+            updateZoom();
+        }
+        
+        function fitToView() {
+            const containerRect = container.getBoundingClientRect();
+            const scaleX = containerRect.width / canvas.naturalWidth;
+            const scaleY = containerRect.height / canvas.naturalHeight;
+            zoomScale = Math.min(scaleX, scaleY, 1);
+            updateZoom();
+            container.scrollLeft = 0;
+            container.scrollTop = 0;
+        }
+        
+        function actualSize() {
+            zoomScale = 1.0;
+            updateZoom();
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'd' || e.key === 'D' || e.key === 'Delete') {
+                remove();
+            } else if (e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                save();
+            } else if (e.ctrlKey && e.key === 'z') {
+                e.preventDefault();
+                undo();
+            } else if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                zoomIn();
+            } else if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                zoomOut();
+            } else if (e.key === '0') {
+                e.preventDefault();
+                actualSize();
+            }
+        });
+        
+        // Load initial image
+        fetch('/load_image', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({image_path: window.location.pathname})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                canvas.src = data.image;
+            }
+        });
+        
+        // Click to segment
+        canvas.addEventListener('click', (e) => {
+            if (isPanning) return;  // Don't segment while panning
+            
+            const rect = canvas.getBoundingClientRect();
+            // Account for zoom scale
+            const x = Math.floor((e.clientX - rect.left) / zoomScale);
+            const y = Math.floor((e.clientY - rect.top) / zoomScale);
+            
+            // Prototype mode: set prototype instead of segment
+            if (prototypeMode) {
+                fetch('/set_prototype', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({x, y})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(`Prototype set (${data.area} px, solidity ${data.solidity.toFixed(2)})`, 'success');
+                        document.getElementById('findBtn').disabled = false;
+                        prototypeMode = false;
+                        document.getElementById('prototypeBtn').textContent = '🎯 Set Prototype (Click Object)';
+                    } else {
+                        showNotification(data.error, 'error');
+                    }
+                });
+                return;
+            }
+            
+            fetch('/segment_point', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({x, y})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = data.count;
+                    updateStatus();
+                    showNotification(`Selected (${data.area} px)`, 'success');
+                } else {
+                    showNotification(data.error, 'error');
+                }
+            });
+        });
+        
+        function undo() {
+            fetch('/undo', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = data.count;
+                    updateStatus();
+                    showNotification('Undone', 'success');
+                }
+            });
+        }
+        
+        function clear() {
+            fetch('/clear', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = 0;
+                    updateStatus();
+                    showNotification('Cleared', 'success');
+                }
+            });
+        }
+        
+        function setPrototypeMode() {
+            prototypeMode = true;
+            document.getElementById('prototypeBtn').textContent = '🎯 Click an Arrow Now...';
+            showNotification('Click on one arrow to set as prototype', 'info');
+        }
+        
+        function findSimilar() {
+            showNotification('Finding similar objects (rotation-invariant)...', 'info');
+            
+            fetch('/find_similar', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = data.count;
+                    updateStatus();
+                    showNotification(`Found ${data.detected} similar objects (checked ${data.candidates} candidates)`, 'success');
+                } else {
+                    showNotification(data.error || 'No similar objects found', 'error');
+                }
+            })
+            .catch(err => {
+                showNotification('Search failed: ' + err.message, 'error');
+            });
+        }
+        
+        function autoDetect() {
+            showNotification('Detecting arrows...', 'info');
+            
+            fetch('/auto_detect_arrows', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = data.count;
+                    updateStatus();
+                    showNotification(`Auto-detected ${data.detected} arrows (${data.candidates} candidates checked)`, 'success');
+                } else {
+                    showNotification(data.error || 'No arrows found', 'error');
+                }
+            })
+            .catch(err => {
+                showNotification('Detection failed: ' + err.message, 'error');
+            });
+        }
+        
+        function remove() {
+            if (selectedCount === 0) {
+                showNotification('Nothing selected', 'error');
+                return;
+            }
+            
+            fetch('/remove', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = 0;
+                    canUndo = true;
+                    updateStatus();
+                    showNotification(`Removed ${data.removed} items`, 'success');
+                } else {
+                    showNotification(data.error, 'error');
+                }
+            });
+        }
+        
+        function undoRemove() {
+            fetch('/undo_remove', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    canUndo = false;
+                    updateStatus();
+                    showNotification('Undo complete', 'success');
+                } else {
+                    showNotification(data.error, 'error');
+                }
+            });
+        }
+        
+        function save() {
+            fetch('/save', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`Saved: ${data.path}`, 'success');
+                } else {
+                    showNotification(data.error, 'error');
+                }
+            });
+        }
+        
+        function reset() {
+            if (!confirm('Reset to original image? All changes will be lost.')) return;
+            
+            fetch('/reset', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = 0;
+                    canUndo = false;
+                    updateStatus();
+                    showNotification('Reset complete', 'success');
+                }
+            });
+        }
+        
+        function updateStatus() {
+            document.getElementById('selectedCount').textContent = selectedCount;
+            document.getElementById('canUndo').textContent = canUndo ? 'Yes' : 'No';
+        }
+        
+        function showNotification(message, type = 'success') {
+            const notif = document.createElement('div');
+            notif.className = `notification ${type}`;
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            
+            setTimeout(() => {
+                notif.style.animation = 'slideIn 0.3s reverse';
+                setTimeout(() => notif.remove(), 300);
+            }, 2000);
+        }
+        
+        // Load image on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            fetch('/get_image')
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    canvas.src = data.image;
+                    selectedCount = data.selected_count;
+                    canUndo = data.can_undo;
+                    updateStatus();
+                } else {
+                    showNotification('Failed to load image', 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
