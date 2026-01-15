@@ -12,3 +12,4 @@ scikit-image==0.24.0
 controlnet-aux==0.0.9
 torch==2.5.1
 torchvision==0.20.1
+ultralytics==8.3.52
