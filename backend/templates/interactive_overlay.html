@@ -275,6 +275,13 @@
                     </label>
                     <input type="range" id="rotation-slider" min="-180" max="180" value="0">
                 </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        Line Thickness: <span id="thickness-value">1</span>px
+                    </label>
+                    <input type="range" id="thickness-slider" min="1" max="10" value="1" step="1">
+                </div>
             </div>
 
             <div class="section">
@@ -313,6 +320,7 @@
                     <div><kbd>W</kbd> / <kbd>Q</kbd> Width</div>
                     <div><kbd>H</kbd> / <kbd>G</kbd> Height</div>
                     <div><kbd>,</kbd> / <kbd>.</kbd> Rotate</div>
+                    <div><kbd>T</kbd> / <kbd>Y</kbd> Thickness</div>
                 </div>
             </div>
         </div>
@@ -471,6 +479,16 @@
                     adjustScaleY(-0.05);
                     e.preventDefault();
                     break;
+                case 't':
+                case 'T':
+                    adjustThickness(-1);
+                    e.preventDefault();
+                    break;
+                case 'y':
+                case 'Y':
+                    adjustThickness(1);
+                    e.preventDefault();
+                    break;
             }
 
             if (dx !== 0 || dy !== 0) {
@@ -546,6 +564,19 @@
                 updateImage();
             });
         });
+        
+        // Thickness slider
+        document.getElementById('thickness-slider').addEventListener('input', (e) => {
+            const thickness = parseInt(e.target.value);
+            fetch('/set_thickness', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({thickness: thickness})
+            }).then(() => {
+                document.getElementById('thickness-value').textContent = e.target.value;
+                updateImage();
+            });
+        });
 
         function setOffset(x, y) {
             return fetch('/set_offset', {
@@ -568,6 +599,8 @@
                     document.getElementById('scale-y-value').textContent = '100%';
                     document.getElementById('rotation-slider').value = 0;
                     document.getElementById('rotation-value').textContent = '0°';
+                    document.getElementById('thickness-slider').value = 1;
+                    document.getElementById('thickness-value').textContent = '1';
                     updateImage();
                 });
         }
@@ -602,6 +635,14 @@
             const slider = document.getElementById('rotation-slider');
             let newValue = parseFloat(slider.value) + delta;
             newValue = Math.max(-180, Math.min(180, newValue));
+            slider.value = newValue;
+            slider.dispatchEvent(new Event('input'));
+        }
+        
+        function adjustThickness(delta) {
+            const slider = document.getElementById('thickness-slider');
+            let newValue = parseInt(slider.value) + delta;
+            newValue = Math.max(1, Math.min(10, newValue));
             slider.value = newValue;
             slider.dispatchEvent(new Event('input'));
         }

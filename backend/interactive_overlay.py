@@ -29,6 +29,7 @@ class OverlayState:
         self.scale_x = 1.0  # Width scale
         self.scale_y = 1.0  # Height scale
         self.rotation = 0.0  # Rotation angle in degrees
+        self.thickness = 1  # Line thickness (1-10px)
         self.image1_path = None
         self.image2_path = None
 
@@ -80,6 +81,12 @@ def create_overlay():
     # Invert grayscale: white background (255) becomes black (0), dark lines become bright
     gray1_inv = 255 - gray1
     gray2_inv = 255 - gray2
+    
+    # Apply thickness/dilation to make lines thicker if needed
+    if state.thickness > 1:
+        kernel = np.ones((state.thickness, state.thickness), np.uint8)
+        gray1_inv = cv2.dilate(gray1_inv, kernel, iterations=1)
+        gray2_inv = cv2.dilate(gray2_inv, kernel, iterations=1)
     
     # Upper image -> Green channel (with rotation, scale, and offset)
     # Apply transformations: scale (width/height) and rotate
@@ -171,6 +178,7 @@ def get_image():
         'scale_x': state.scale_x,
         'scale_y': state.scale_y,
         'rotation': state.rotation,
+        'thickness': state.thickness,
         'width': state.img1.shape[1],
         'height': state.img1.shape[0]
     })
@@ -221,6 +229,14 @@ def set_rotation():
     state.rotation = float(data.get('rotation', 0.0))
     return jsonify({'success': True})
 
+@app.route('/set_thickness', methods=['POST'])
+def set_thickness():
+    """Update line thickness"""
+    data = request.json
+    thickness = int(data.get('thickness', 1))
+    state.thickness = max(1, min(10, thickness))
+    return jsonify({'success': True})
+
 @app.route('/reset', methods=['POST'])
 def reset():
     """Reset offset to 0,0"""
@@ -231,6 +247,7 @@ def reset():
     state.scale_x = 1.0
     state.scale_y = 1.0
     state.rotation = 0.0
+    state.thickness = 1
     return jsonify({'success': True})
 
 @app.route('/save', methods=['POST'])
