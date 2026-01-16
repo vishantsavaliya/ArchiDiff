@@ -1,43 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusMessage } from '../components/StatusMessage';
 import axios from 'axios';
 
 const PROCESSING_API = 'http://localhost:5004';
 
-interface ProcessedImages {
-  jobId: string;
-  file1Name: string;
-  file2Name: string;
-  image1Url: string;
-  image2Url: string;
-}
-
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [images, setImages] = useState<ProcessedImages | null>(null);
-  const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
   const [selectedImage, setSelectedImage] = useState<1 | 2>(1);
 
-  useEffect(() => {
-    // Load processed images from localStorage
-    const jobId = localStorage.getItem('dashboard_job_id');
-    const file1Name = localStorage.getItem('dashboard_file1');
-    const file2Name = localStorage.getItem('dashboard_file2');
-
-    if (jobId && file1Name && file2Name) {
-      setImages({
-        jobId,
-        file1Name,
-        file2Name,
-        image1Url: `${PROCESSING_API}/image/${jobId}/1`,
-        image2Url: `${PROCESSING_API}/image/${jobId}/2`,
-      });
-      setMessage({ type: 'success', text: 'Processing complete! Choose a tool below.' });
-    } else {
-      setMessage({ type: 'error', text: 'No processed images found. Please upload files first.' });
-    }
+  // Load processed images from localStorage on mount
+  const jobId = localStorage.getItem('dashboard_job_id');
+  const file1Name = localStorage.getItem('dashboard_file1');
+  const file2Name = localStorage.getItem('dashboard_file2');
+  
+  // Track last activity time
+  React.useEffect(() => {
+    localStorage.setItem('last_activity', Date.now().toString());
+    
+    // Update activity on user interaction
+    const updateActivity = () => {
+      localStorage.setItem('last_activity', Date.now().toString());
+    };
+    
+    window.addEventListener('click', updateActivity);
+    window.addEventListener('keypress', updateActivity);
+    window.addEventListener('scroll', updateActivity);
+    
+    return () => {
+      window.removeEventListener('click', updateActivity);
+      window.removeEventListener('keypress', updateActivity);
+      window.removeEventListener('scroll', updateActivity);
+    };
   }, []);
+
+  const images = (jobId && file1Name && file2Name) ? {
+    jobId,
+    file1Name,
+    file2Name,
+    image1Url: `${PROCESSING_API}/image/${jobId}/1`,
+    image2Url: `${PROCESSING_API}/image/${jobId}/2`,
+  } : null;
+
+  const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(
+    images ? { type: 'success', text: 'Processing complete! Choose a tool below.' } : { type: 'error', text: 'No processed images found. Please upload files first.' }
+  );
 
   const handleOverlayComparison = () => {
     if (!images) return;
@@ -81,18 +88,50 @@ export const Dashboard: React.FC = () => {
       URL.revokeObjectURL(url);
       
       setMessage({ type: 'success', text: `Downloaded ${fileName}` });
-    } catch (error) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to download image' });
     }
   };
 
   const handleStartOver = () => {
+    // Clean up current job before leaving
+    if (jobId) {
+      axios.delete(`${PROCESSING_API}/cleanup/${jobId}`).catch(err => 
+        console.log('Cleanup on exit:', err)
+      );
+    }
+    
     // Clear localStorage
     localStorage.removeItem('dashboard_job_id');
     localStorage.removeItem('dashboard_file1');
     localStorage.removeItem('dashboard_file2');
     localStorage.removeItem('overlay_job_id');
+    localStorage.removeItem('sam_image_url');
+    localStorage.removeItem('line_selector_image_url');
+    localStorage.removeItem('last_activity');
     navigate('/');
+  };
+
+  const handleCleanupOldFiles = async () => {
+    try {
+      setMessage({ type: 'info', text: 'Cleaning up old files...' });
+      
+      // Get current job ID to keep it active
+      const currentJobId = localStorage.getItem('dashboard_job_id');
+      const activeJobs = currentJobId ? [currentJobId] : [];
+      
+      const response = await axios.post(`${PROCESSING_API}/cleanup-all`, {
+        active_job_ids: activeJobs
+      });
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Cleanup complete! Removed ${response.data.upload_folders_removed} upload folders and ${response.data.processed_folders_removed} processed folders.` 
+      });
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to cleanup old files' });
+      console.error('Cleanup error:', error);
+    }
   };
 
   if (!images) {
@@ -282,12 +321,22 @@ export const Dashboard: React.FC = () => {
 
       {/* Actions */}
       <div className="flex justify-between items-center">
-        <button
-          onClick={handleStartOver}
-          className="btn-secondary"
-        >
-          ← Start Over
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleStartOver}
+            className="btn-secondary"
+          >
+            ← Start Over
+          </button>
+          
+          <button
+            onClick={handleCleanupOldFiles}
+            className="btn-secondary"
+            title="Delete old processed files to free up storage"
+          >
+            🗑️ Cleanup Old Files
+          </button>
+        </div>
         
         <div className="text-sm text-gray-500">
           <p>✓ PDF Converted</p>

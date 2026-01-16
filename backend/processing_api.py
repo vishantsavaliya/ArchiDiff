@@ -108,19 +108,30 @@ def cleanup_old_uploads():
         import time
         current_time = time.time()
         
-        # Remove upload folders older than 1 hour
+        # Remove ALL upload folders (they should be deleted after processing anyway)
         for folder in UPLOAD_FOLDER.iterdir():
             if folder.is_dir():
-                folder_age = current_time - folder.stat().st_mtime
-                if folder_age > 3600:  # 1 hour
-                    shutil.rmtree(folder, ignore_errors=True)
+                print(f"Cleaning up upload folder: {folder.name}")
+                shutil.rmtree(folder, ignore_errors=True)
         
-        # Remove processed folders older than 1 hour
+        # Remove processed folders older than 30 minutes (keeps files during editing)
         for folder in OUTPUT_FOLDER.iterdir():
             if folder.is_dir():
                 folder_age = current_time - folder.stat().st_mtime
-                if folder_age > 3600:  # 1 hour
+                if folder_age > 1800:  # 30 minutes
+                    print(f"Cleaning up old processed folder: {folder.name}")
                     shutil.rmtree(folder, ignore_errors=True)
+        
+        # Limit processing_jobs dictionary to prevent memory buildup
+        if len(processing_jobs) > 50:
+            # Remove oldest completed/failed jobs
+            completed_jobs = [(k, v) for k, v in processing_jobs.items() 
+                            if v['status'] in ['completed', 'failed']]
+            if len(completed_jobs) > 30:
+                # Sort by age and remove oldest
+                for job_id, _ in completed_jobs[:len(completed_jobs) - 30]:
+                    print(f"Removing old job from memory: {job_id}")
+                    del processing_jobs[job_id]
     except Exception as e:
         print(f"Cleanup warning: {e}")
 
@@ -131,6 +142,26 @@ def process_files(job_id):
     try:
         job_output = OUTPUT_FOLDER / job_id
         job_output.mkdir(parents=True, exist_ok=True)
+        
+        # Check if already processed (prevent reprocessing)
+        final1_path = job_output / 'file1_final.png'
+        final2_path = job_output / 'file2_final.png'
+        
+        if final1_path.exists() and final2_path.exists():
+            print(f"Job {job_id} already processed, skipping...")
+            job['file1_processed'] = str(final1_path)
+            job['file2_processed'] = str(final2_path)
+            
+            # Clean up uploads if they still exist
+            upload_folder = UPLOAD_FOLDER / job_id
+            if upload_folder.exists():
+                shutil.rmtree(upload_folder, ignore_errors=True)
+                print(f"  ✓ Cleaned up leftover uploads")
+            
+            job['status'] = 'completed'
+            job['current_step'] = 'Already processed (loaded from cache)'
+            job['progress'] = 100
+            return
         
         # Step 1: Convert PDFs to PNG if needed (sequential, fast)
         job['current_step'] = 'Converting PDFs to PNG...'
@@ -159,46 +190,95 @@ def process_files(job_id):
         
         job['progress'] = 15
         
-        # Step 2: Upscale both files in parallel
-        job['current_step'] = 'Upscaling both images 2x...'
+        # Step 2: Remove text BEFORE upscaling (5-10x faster on smaller images!)
+        job['current_step'] = 'Removing text annotations...'
         job['progress'] = 20
         
-        upscaled1_path = job_output / 'file1_upscaled.png'
-        upscaled2_path = job_output / 'file2_upscaled.png'
+        cleaned1_path = job_output / 'file1_cleaned.png'
+        cleaned2_path = job_output / 'file2_cleaned.png'
         
         # Process both in parallel using threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future1 = executor.submit(upscale_image, file1_path, upscaled1_path)
-            future2 = executor.submit(upscale_image, file2_path, upscaled2_path)
-            
-            # Wait for both to complete
-            future1.result()
-            future2.result()
+        # Only remove text if not already done
+        text_tasks = []
+        if not cleaned1_path.exists():
+            text_tasks.append(('file1', file1_path, cleaned1_path))
+        else:
+            print(f"Skipping text removal for file1 (already exists)")
         
-        job['progress'] = 50
+        if not cleaned2_path.exists():
+            text_tasks.append(('file2', file2_path, cleaned2_path))
+        else:
+            print(f"Skipping text removal for file2 (already exists)")
         
-        # Step 3: Remove text from both files in parallel (single pass)
-        job['current_step'] = 'Removing text from both images...'
-        job['progress'] = 55
+        if text_tasks:
+            # Use 1 worker to prevent multiple EasyOCR instances (saves memory)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                futures = [executor.submit(remove_text, task[1], task[2]) for task in text_tasks]
+                for future in futures:
+                    future.result()
         
-        final1_path = job_output / 'file1_final.png'
-        final2_path = job_output / 'file2_final.png'
+        job['progress'] = 60
         
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future1 = executor.submit(remove_text, upscaled1_path, final1_path)
-            future2 = executor.submit(remove_text, upscaled2_path, final2_path)
-            
-            # Wait for both to complete
-            future1.result()
-            future2.result()
+        # Step 3: Upscale cleaned images (skip if already done)
+        job['current_step'] = 'Upscaling images 2x...'
+        job['progress'] = 65
+        
+        # Only upscale if not already done
+        tasks = []
+        if not final1_path.exists():
+            tasks.append(('file1', cleaned1_path, final1_path))
+        else:
+            print(f"Skipping upscale for file1 (already exists)")
+        
+        if not final2_path.exists():
+            tasks.append(('file2', cleaned2_path, final2_path))
+        else:
+            print(f"Skipping upscale for file2 (already exists)")
+        
+        if tasks:
+            # Use 1 worker to reduce memory pressure (process sequentially)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                futures = [executor.submit(upscale_image, task[1], task[2]) for task in tasks]
+                for future in futures:
+                    future.result()
         
         job['progress'] = 95
         
         # Store final paths
         job['file1_processed'] = str(final1_path)
         job['file2_processed'] = str(final2_path)
+        
+        # Clean up to save storage
+        print(f"\n🧹 Cleaning up temporary files for job {job_id}...")
+        
+        # Delete uploads folder (raw files no longer needed)
+        upload_folder = UPLOAD_FOLDER / job_id
+        if upload_folder.exists():
+            shutil.rmtree(upload_folder, ignore_errors=True)
+            print(f"  ✓ Deleted uploads folder")
+        
+        # Delete intermediate files (keep only final processed images)
+        try:
+            # Delete converted PDF folders
+            for folder_name in ['file1_converted', 'file2_converted']:
+                folder = job_output / folder_name
+                if folder.exists():
+                    shutil.rmtree(folder, ignore_errors=True)
+                    print(f"  ✓ Deleted {folder_name}")
+            
+            # Delete cleaned intermediates (keep only final upscaled)
+            cleaned1_path = job_output / 'file1_cleaned.png'
+            cleaned2_path = job_output / 'file2_cleaned.png'
+            for cleaned_file in [cleaned1_path, cleaned2_path]:
+                if cleaned_file.exists():
+                    cleaned_file.unlink()
+                    print(f"  ✓ Deleted {cleaned_file.name}")
+        except Exception as e:
+            print(f"  ⚠️ Cleanup warning: {e}")
+        
+        print(f"✅ Job {job_id} completed - only final images kept\n")
         
         # Complete
         job['status'] = 'completed'
@@ -225,29 +305,35 @@ def convert_pdf_to_png(pdf_path, output_folder):
         raise Exception(f"PDF conversion failed: {result.stderr}")
 
 def upscale_image(input_path, output_path):
-    """Upscale image 2x"""
+    """Upscale image 2x (with timeout)"""
     upscale_script = get_script_path('upscale_realesrgan.py')
-    result = subprocess.run([
-        sys.executable, str(upscale_script),
-        str(input_path),
-        str(output_path),
-        '--scale', '2'
-    ], capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        raise Exception(f"Upscaling failed: {result.stderr}")
+    try:
+        result = subprocess.run([
+            sys.executable, str(upscale_script),
+            str(input_path),
+            str(output_path),
+            '--scale', '2'
+        ], capture_output=True, text=True, timeout=180)  # 3 minute timeout
+        
+        if result.returncode != 0:
+            raise Exception(f"Upscaling failed: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        raise Exception(f"Upscaling timed out after 180 seconds (file may be too large)")
 
 def remove_text(input_path, output_path):
-    """Remove text annotations (single pass)"""
+    """Remove text annotations (single pass with timeout)"""
     text_removal_script = get_script_path('remove_text_ocr.py')
-    result = subprocess.run([
-        sys.executable, str(text_removal_script),
-        str(input_path),
-        str(output_path)
-    ], capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        raise Exception(f"Text removal failed: {result.stderr}")
+    try:
+        result = subprocess.run([
+            sys.executable, str(text_removal_script),
+            str(input_path),
+            str(output_path)
+        ], capture_output=True, text=True, timeout=120)  # 2 minute timeout
+        
+        if result.returncode != 0:
+            raise Exception(f"Text removal failed: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        raise Exception(f"Text removal timed out after 120 seconds (file may be too large)")
 
 def process_single_file(input_path, job_id, file_label):
     """DEPRECATED: Use process_files instead for parallel processing"""
@@ -294,20 +380,71 @@ def get_processed_image(job_id, file_num):
 
 @app.route('/cleanup/<job_id>', methods=['DELETE'])
 def cleanup_job(job_id):
-    """Clean up job files"""
-    if job_id in processing_jobs:
-        job_folder = UPLOAD_FOLDER / job_id
-        job_output = OUTPUT_FOLDER / job_id
-        
-        if job_folder.exists():
-            shutil.rmtree(job_folder)
-        if job_output.exists():
-            shutil.rmtree(job_output)
-        
-        del processing_jobs[job_id]
-        return jsonify({'message': 'Job cleaned up successfully'})
+    """Clean up specific job files"""
+    job_folder = UPLOAD_FOLDER / job_id
+    job_output = OUTPUT_FOLDER / job_id
     
+    deleted = False
+    if job_folder.exists():
+        shutil.rmtree(job_folder, ignore_errors=True)
+        deleted = True
+    if job_output.exists():
+        shutil.rmtree(job_output, ignore_errors=True)
+        deleted = True
+    
+    if job_id in processing_jobs:
+        del processing_jobs[job_id]
+        deleted = True
+    
+    if deleted:
+        return jsonify({'message': 'Job cleaned up successfully'})
     return jsonify({'error': 'Job not found'}), 404
+
+@app.route('/cleanup-all', methods=['POST'])
+def cleanup_all():
+    """Clean up ALL old processed files immediately"""
+    try:
+        upload_count = 0
+        processed_count = 0
+        
+        # Get current active job IDs from request (optional)
+        active_jobs = set()
+        if request.json and 'active_job_ids' in request.json:
+            active_jobs = set(request.json['active_job_ids'])
+        
+        # Clean upload folders
+        for folder in UPLOAD_FOLDER.iterdir():
+            if folder.is_dir() and folder.name not in active_jobs:
+                try:
+                    shutil.rmtree(folder)
+                    upload_count += 1
+                except Exception as e:
+                    print(f"Failed to remove {folder}: {e}")
+        
+        # Clean processed folders
+        for folder in OUTPUT_FOLDER.iterdir():
+            if folder.is_dir() and folder.name not in active_jobs:
+                try:
+                    shutil.rmtree(folder)
+                    processed_count += 1
+                except Exception as e:
+                    print(f"Failed to remove {folder}: {e}")
+        
+        # Clean in-memory jobs (keep active ones)
+        jobs_to_remove = [jid for jid in processing_jobs.keys() if jid not in active_jobs]
+        for job_id in jobs_to_remove:
+            del processing_jobs[job_id]
+        
+        message = f"Cleaned {upload_count} upload folders, {processed_count} processed folders, and {len(jobs_to_remove)} jobs from memory"
+        print(message)
+        return jsonify({
+            'message': message,
+            'upload_folders_removed': upload_count,
+            'processed_folders_removed': processed_count,
+            'jobs_removed': len(jobs_to_remove)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("=" * 60)
@@ -317,11 +454,18 @@ if __name__ == '__main__':
     print(f"📁 Output folder: {OUTPUT_FOLDER.absolute()}")
     print(f"🌐 Server: http://localhost:5004")
     print("=" * 60)
+    
+    # Cleanup old files on startup
+    print("\n🧹 Running startup cleanup...")
+    cleanup_old_uploads()
+    print("✓ Startup cleanup complete\n")
+    print("=" * 60)
     print("\nEndpoints:")
     print("  POST   /upload          - Upload and process 2 files")
     print("  GET    /status/<job_id> - Get processing status")
     print("  GET    /image/<job_id>/<file_num> - Get processed image")
-    print("  DELETE /cleanup/<job_id> - Clean up job files")
+    print("  DELETE /cleanup/<job_id> - Clean up specific job files")
+    print("  POST   /cleanup-all     - Clean up ALL old files (preserves active jobs)")
     print("=" * 60)
     
     app.run(host='0.0.0.0', port=5004, debug=True, threaded=True)

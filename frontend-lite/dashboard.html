@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ArchiDiff</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #666;
+        }
+        
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .image-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .image-card h3 {
+            margin-bottom: 10px;
+        }
+        
+        .image-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .tool-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+        
+        .tool-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            background: #764ba2;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .actions {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Processing Dashboard</h1>
+        <p class="subtitle">Your images are ready! Choose a tool to continue editing.</p>
+    </div>
+    
+    <div class="images-grid" id="imagesGrid">
+        <!-- Images will be loaded here -->
+    </div>
+    
+    <div class="tools-grid">
+        <div class="tool-card" onclick="openOverlay()">
+            <div class="tool-icon">🔄</div>
+            <h3>Overlay Comparison</h3>
+            <p>Compare both drawings side-by-side with red/green/blue overlay</p>
+        </div>
+        
+        <div class="tool-card" onclick="openSAM(1)">
+            <div class="tool-icon">🎯</div>
+            <h3>SAM Remover</h3>
+            <p>Click on annotations to remove them using AI segmentation</p>
+        </div>
+        
+        <div class="tool-card" onclick="openLineSelector(1)">
+            <div class="tool-icon">📏</div>
+            <h3>Line Selector</h3>
+            <p>Detect and selectively remove lines from drawings</p>
+        </div>
+    </div>
+    
+    <div class="actions">
+        <button class="btn btn-secondary" onclick="startOver()">← Start Over</button>
+        <button class="btn btn-secondary" onclick="cleanupOldFiles()">🗑️ Cleanup Old Files</button>
+        <div>
+            <p style="font-size: 0.9rem; color: #666;">✓ Text Removed → Upscaled 2x</p>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:5004';
+        const jobId = localStorage.getItem('dashboard_job_id');
+        const file1Name = localStorage.getItem('dashboard_file1');
+        const file2Name = localStorage.getItem('dashboard_file2');
+        
+        if (!jobId || !file1Name || !file2Name) {
+            alert('No processed images found. Redirecting to upload page...');
+            window.location.href = 'index.html';
+        }
+        
+        // Load images
+        const imagesGrid = document.getElementById('imagesGrid');
+        imagesGrid.innerHTML = `
+            <div class="image-card">
+                <h3>Drawing 1</h3>
+                <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">${file1Name}</p>
+                <img src="${API_URL}/image/${jobId}/1" alt="Drawing 1">
+                <button class="btn" onclick="downloadImage(1)">📥 Download</button>
+            </div>
+            <div class="image-card">
+                <h3>Drawing 2</h3>
+                <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">${file2Name}</p>
+                <img src="${API_URL}/image/${jobId}/2" alt="Drawing 2">
+                <button class="btn" onclick="downloadImage(2)">📥 Download</button>
+            </div>
+        `;
+        
+        function openOverlay() {
+            localStorage.setItem('overlay_job_id', jobId);
+            alert('Overlay tool - Coming soon! (You can integrate your existing overlay.html)');
+        }
+        
+        function openSAM(imageNum) {
+            const imageUrl = `${API_URL}/image/${jobId}/${imageNum}`;
+            localStorage.setItem('sam_image_url', imageUrl);
+            alert('SAM Remover tool - Coming soon! (You can integrate your existing SAM remover)');
+        }
+        
+        function openLineSelector(imageNum) {
+            const imageUrl = `${API_URL}/image/${jobId}/${imageNum}`;
+            localStorage.setItem('line_selector_image_url', imageUrl);
+            alert('Line Selector tool - Coming soon! (You can integrate your existing line selector)');
+        }
+        
+        async function downloadImage(imageNum) {
+            try {
+                const imageUrl = `${API_URL}/image/${jobId}/${imageNum}`;
+                const fileName = imageNum === 1 ? file1Name : file2Name;
+                
+                const response = await fetch(imageUrl);
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `processed_${fileName}`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert(`Downloaded ${fileName}`);
+            } catch (error) {
+                alert('Failed to download image');
+            }
+        }
+        
+        async function cleanupOldFiles() {
+            if (!confirm('Remove all old processed files? (Current job will be kept)')) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/cleanup-all`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active_job_ids: [jobId] })
+                });
+                
+                const data = await response.json();
+                alert(`Cleanup complete! Removed ${data.processed_folders_removed} folders.`);
+            } catch (error) {
+                alert('Failed to cleanup files');
+            }
+        }
+        
+        function startOver() {
+            if (!confirm('Start over? This will clear your current session.')) return;
+            
+            // Cleanup current job
+            fetch(`${API_URL}/cleanup/${jobId}`, { method: 'DELETE' })
+                .catch(err => console.log('Cleanup error:', err));
+            
+            localStorage.removeItem('dashboard_job_id');
+            localStorage.removeItem('dashboard_file1');
+            localStorage.removeItem('dashboard_file2');
+            localStorage.removeItem('overlay_job_id');
+            localStorage.removeItem('sam_image_url');
+            localStorage.removeItem('line_selector_image_url');
+            
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

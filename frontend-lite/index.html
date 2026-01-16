@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArchiDiff - Architectural Drawing Comparison</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-info {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .file-info.active {
+            display: block;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress-container {
+            display: none;
+            margin-top: 30px;
+        }
+        
+        .progress-container.active {
+            display: block;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .progress-text {
+            color: #666;
+            text-align: center;
+        }
+        
+        .message {
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .message.active {
+            display: block;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ ArchiDiff</h1>
+        <p class="subtitle">Upload two architectural drawings to compare</p>
+        
+        <div class="upload-area" onclick="document.getElementById('file1').click()">
+            <div class="upload-icon">📄</div>
+            <h3>Drawing 1 (PDF or Image)</h3>
+            <p>Click to select file</p>
+            <input type="file" id="file1" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFileSelect(1)">
+        </div>
+        
+        <div class="file-info" id="file1-info"></div>
+        
+        <div class="upload-area" onclick="document.getElementById('file2').click()">
+            <div class="upload-icon">📄</div>
+            <h3>Drawing 2 (PDF or Image)</h3>
+            <p>Click to select file</p>
+            <input type="file" id="file2" accept=".pdf,.png,.jpg,.jpeg" onchange="handleFileSelect(2)">
+        </div>
+        
+        <div class="file-info" id="file2-info"></div>
+        
+        <button class="btn" id="uploadBtn" onclick="uploadFiles()" disabled>
+            🚀 Process Files
+        </button>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <p class="progress-text" id="progressText">Initializing...</p>
+        </div>
+        
+        <div class="message" id="message"></div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:5004';
+        let selectedFiles = { file1: null, file2: null };
+        
+        function handleFileSelect(fileNum) {
+            const fileInput = document.getElementById(`file${fileNum}`);
+            const fileInfo = document.getElementById(`file${fileNum}-info`);
+            const file = fileInput.files[0];
+            
+            if (file) {
+                selectedFiles[`file${fileNum}`] = file;
+                fileInfo.innerHTML = `✅ ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                fileInfo.classList.add('active');
+            }
+            
+            // Enable button if both files selected
+            document.getElementById('uploadBtn').disabled = !(selectedFiles.file1 && selectedFiles.file2);
+        }
+        
+        async function uploadFiles() {
+            const formData = new FormData();
+            formData.append('file1', selectedFiles.file1);
+            formData.append('file2', selectedFiles.file2);
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const message = document.getElementById('message');
+            
+            uploadBtn.disabled = true;
+            progressContainer.classList.add('active');
+            message.classList.remove('active');
+            
+            try {
+                // Upload files
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Upload failed');
+                
+                const data = await response.json();
+                const jobId = data.job_id;
+                
+                // Save to localStorage
+                localStorage.setItem('dashboard_job_id', jobId);
+                localStorage.setItem('dashboard_file1', data.file1);
+                localStorage.setItem('dashboard_file2', data.file2);
+                
+                // Poll for progress
+                pollProgress(jobId);
+                
+            } catch (error) {
+                showMessage('error', 'Upload failed: ' + error.message);
+                uploadBtn.disabled = false;
+                progressContainer.classList.remove('active');
+            }
+        }
+        
+        async function pollProgress(jobId) {
+            try {
+                const response = await fetch(`${API_URL}/status/${jobId}`);
+                const data = await response.json();
+                
+                // Update progress bar
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+                
+                progressFill.style.width = data.progress + '%';
+                progressFill.textContent = data.progress + '%';
+                progressText.textContent = data.current_step;
+                
+                if (data.status === 'completed') {
+                    showMessage('success', '✅ Processing complete! Redirecting to dashboard...');
+                    setTimeout(() => {
+                        window.location.href = 'dashboard.html';
+                    }, 1500);
+                } else if (data.status === 'failed') {
+                    showMessage('error', '❌ Processing failed: ' + data.error);
+                    document.getElementById('uploadBtn').disabled = false;
+                } else {
+                    // Continue polling
+                    setTimeout(() => pollProgress(jobId), 1000);
+                }
+            } catch (error) {
+                showMessage('error', 'Failed to check status: ' + error.message);
+            }
+        }
+        
+        function showMessage(type, text) {
+            const message = document.getElementById('message');
+            message.className = `message active ${type}`;
+            message.textContent = text;
+        }
+    </script>
+</body>
+</html>

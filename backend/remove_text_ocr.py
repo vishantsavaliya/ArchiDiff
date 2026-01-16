@@ -15,8 +15,13 @@ USE_WHITE_FILL = True  # True = white fill, False = inpaint (blur)
 INPAINT_RADIUS = 7  # Only used if USE_WHITE_FILL = False
 TWO_PASS = False  # Single pass is sufficient for upscaled images
 
+# Global EasyOCR reader to reuse model (saves memory)
+_ocr_reader = None
+
 def remove_text_easyocr(image_path, output_path):
     """Remove text using EasyOCR detection + cv2.inpaint"""
+    global _ocr_reader
+    
     try:
         import easyocr
     except ImportError:
@@ -33,9 +38,27 @@ def remove_text_easyocr(image_path, output_path):
     h, w = image.shape[:2]
     print(f"Image size: {w}x{h}")
     
-    # Initialize EasyOCR
-    print("Initializing EasyOCR (first run downloads models)...")
-    reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+    # Check if image is too large (prevent memory issues)
+    max_pixels = 25_000_000  # ~5000x5000 pixels
+    if h * w > max_pixels:
+        print(f"WARNING: Image too large ({h}x{w} = {h*w:,} pixels). Downscaling for OCR...")
+        scale = (max_pixels / (h * w)) ** 0.5
+        new_h, new_w = int(h * scale), int(w * scale)
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        h, w = new_h, new_w
+        print(f"Downscaled to: {w}x{h}")
+    
+    # Reuse EasyOCR reader to save memory (200-500MB per instance)
+    if _ocr_reader is None:
+        print("Initializing EasyOCR (first run downloads models)...")
+        _ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False, 
+                                      download_enabled=True, 
+                                      model_storage_directory=None,
+                                      quantize=True)  # Use quantized model for less memory
+    else:
+        print("Reusing cached EasyOCR reader...")
+    
+    reader = _ocr_reader
     current_image = image.copy()
     total_removed = 0
     
