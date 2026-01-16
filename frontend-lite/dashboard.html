@@ -10,7 +10,9 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f5;
-            padding: 20px;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
         }
         
         .header {
@@ -38,21 +40,23 @@
         }
         
         .image-card {
-            background: white;
+            background: #3a3a3a;
             border-radius: 15px;
             padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid #4a4a4a;
         }
         
         .image-card h3 {
             margin-bottom: 10px;
+            color: #ffffff;
         }
         
         .image-card img {
             width: 100%;
             height: auto;
             border-radius: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #4a4a4a;
         }
         
         .tools-grid {
@@ -99,107 +103,883 @@
         }
         
         .btn-secondary {
-            background: #6c757d;
+            background: #4a4a4a;
         }
         
         .btn-secondary:hover {
-            background: #5a6268;
+            background: #5a5a5a;
         }
         
         .actions {
-            background: white;
+            background: #3a3a3a;
             padding: 20px;
             border-radius: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
+            border: 1px solid #4a4a4a;
+        }
+        
+        /* Side Panel Layout */
+        .sidebar {
+            width: 280px;
+            background: #2d2d2d;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #404040;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .tool-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .tool-panel:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+        
+        .tool-panel.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .tool-panel h4 {
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+        
+        .tool-panel p {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+        
+        .tool-content {
+            display: none;
+            background: #2d2d2d;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .tool-content.active {
+            display: block;
+        }
+        
+        .tool-content h1, .tool-content h2 {
+            color: #ffffff;
+        }
+        
+        .tool-content p {
+            color: #b0b0b0;
+        }
+        
+        .canvas-container {
+            width: 100%;
+            height: 70vh;
+            border: 2px solid #4a4a4a;
+            border-radius: 10px;
+            overflow: auto;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .canvas-container img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 5px;
+        }
+        
+        .canvas-container canvas {
+            max-width: 100%;
+            border-radius: 5px;
+            cursor: crosshair;
+        }
+        
+        .controls {
+            background: #3a3a3a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #4a4a4a;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #e0e0e0;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        
+        .control-group input[type="number"] {
+            width: 80px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
+        
+        .status-bar {
+            background: #3a3a3a;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            border: 1px solid #4a4a4a;
+            color: #b0b0b0;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 Processing Dashboard</h1>
-        <p class="subtitle">Your images are ready! Choose a tool to continue editing.</p>
-    </div>
-    
-    <div class="images-grid" id="imagesGrid">
-        <!-- Images will be loaded here -->
-    </div>
-    
-    <div class="tools-grid">
-        <div class="tool-card" onclick="openOverlay()">
-            <div class="tool-icon">🔄</div>
-            <h3>Overlay Comparison</h3>
-            <p>Compare both drawings side-by-side with red/green/blue overlay</p>
+    <!-- Sidebar with Tools -->
+    <div class="sidebar">
+        <h2 style="margin-bottom: 20px;">🏗️ ArchiDiff</h2>
+        
+        <div class="tool-panel active" onclick="switchTool('images')">
+            <h4>📄 Images</h4>
+            <p>View processed drawings</p>
         </div>
         
-        <div class="tool-card" onclick="openSAM(1)">
-            <div class="tool-icon">🎯</div>
-            <h3>SAM Remover</h3>
-            <p>Click on annotations to remove them using AI segmentation</p>
+        <div class="tool-panel" onclick="switchTool('overlay')">
+            <h4>🔄 Overlay Compare</h4>
+            <p>Red/green/blue comparison</p>
         </div>
         
-        <div class="tool-card" onclick="openLineSelector(1)">
-            <div class="tool-icon">📏</div>
-            <h3>Line Selector</h3>
-            <p>Detect and selectively remove lines from drawings</p>
+        <div class="tool-panel" onclick="switchTool('sam')">
+            <h4>🎯 SAM Remover</h4>
+            <p>AI-powered annotation removal</p>
         </div>
+        
+        <div class="tool-panel" onclick="switchTool('lines')">
+            <h4>📏 Line Selector</h4>
+            <p>Detect and remove lines</p>
+        </div>
+        
+        <hr style="margin: 20px 0; border: 1px solid #eee;">
+        
+        <button class="btn btn-secondary" onclick="startOver()" style="width: 100%; margin-bottom: 10px;">← Start Over</button>
+        <button class="btn btn-secondary" onclick="cleanupNow()" style="width: 100%;">🗑️ Cleanup Files</button>
+        
+        <p style="font-size: 0.8rem; color: #666; margin-top: 15px; text-align: center;">✓ Text Removed<br>✓ Upscaled 2x</p>
     </div>
     
-    <div class="actions">
-        <button class="btn btn-secondary" onclick="startOver()">← Start Over</button>
-        <button class="btn btn-secondary" onclick="cleanupOldFiles()">🗑️ Cleanup Old Files</button>
-        <div>
-            <p style="font-size: 0.9rem; color: #666;">✓ Text Removed → Upscaled 2x</p>
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Images View -->
+        <div class="tool-content active" id="content-images">
+            <h1>📊 Your Processed Images</h1>
+            <p style="color: #666; margin-bottom: 20px;">Select a tool from the sidebar to start editing</p>
+            <div class="images-grid" id="imagesGrid"></div>
+        </div>
+        
+        <!-- Overlay Tool -->
+        <div class="tool-content" id="content-overlay">
+            <h2>🔄 Overlay Comparison</h2>
+            <p style="color: #666; margin-bottom: 15px;">Green = Drawing 1, Pink = Drawing 2, White = Match</p>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>Position X: <span id="dxValue">0</span></label>
+                    <input type="range" id="dxSlider" min="-500" max="500" value="0" oninput="updateOverlay()">
+                </div>
+                <div class="control-group">
+                    <label>Position Y: <span id="dyValue">0</span></label>
+                    <input type="range" id="dySlider" min="-500" max="500" value="0" oninput="updateOverlay()">
+                </div>
+                <div class="control-group">
+                    <label>Rotation: <span id="rotationValue">0</span>°</label>
+                    <input type="range" id="rotationSlider" min="-180" max="180" value="0" oninput="updateOverlay()">
+                </div>
+                <div class="control-group">
+                    <label>Scale: <span id="scaleValue">1.0</span></label>
+                    <input type="range" id="scaleSlider" min="0.5" max="2.0" step="0.1" value="1.0" oninput="updateOverlay()">
+                </div>
+                <div class="control-group">
+                    <label>Opacity: <span id="opacityValue">1.0</span></label>
+                    <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1.0" oninput="updateOverlay()">
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-small" onclick="resetOverlay()">Reset</button>
+                    <button class="btn btn-small" onclick="downloadOverlay()">💾 Download</button>
+                </div>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="overlayCanvas"></canvas>
+            </div>
+        </div>
+        
+        <!-- SAM Remover -->
+        <div class="tool-content" id="content-sam">
+            <h2>🎯 SAM Annotation Remover</h2>
+            <p style="color: #666; margin-bottom: 15px;">Click on annotations to select them for removal</p>
+            
+            <div class="status-bar" id="samStatus">Select an image to start</div>
+            
+            <div style="margin-bottom: 15px;">
+                <label><input type="radio" name="samImage" value="1" checked onchange="loadSAMImage(1)"> Drawing 1</label>
+                <label style="margin-left: 20px;"><input type="radio" name="samImage" value="2" onchange="loadSAMImage(2)"> Drawing 2</label>
+            </div>
+            
+            <div class="btn-group" style="margin-bottom: 15px;">
+                <button class="btn btn-small" onclick="applySAMMask()">Apply Remove</button>
+                <button class="btn btn-small btn-secondary" onclick="resetSAM()">Reset</button>
+                <button class="btn btn-small" onclick="downloadSAM()">💾 Download</button>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="samCanvas"></canvas>
+            </div>
+        </div>
+        
+        <!-- Line Selector -->
+        <div class="tool-content" id="content-lines">
+            <h2>📏 Line Selector</h2>
+            <p style="color: #666; margin-bottom: 15px;">Click on lines to select them for removal</p>
+            
+            <div class="status-bar" id="lineStatus">Select an image to start</div>
+            
+            <div style="margin-bottom: 15px;">
+                <label><input type="radio" name="lineImage" value="1" checked onchange="loadLineImage(1)"> Drawing 1</label>
+                <label style="margin-left: 20px;"><input type="radio" name="lineImage" value="2" onchange="loadLineImage(2)"> Drawing 2</label>
+            </div>
+            
+            <div class="btn-group" style="margin-bottom: 15px;">
+                <button class="btn btn-small" onclick="removeSelectedLines()">Remove Lines</button>
+                <button class="btn btn-small btn-secondary" onclick="clearLineSelection()">Clear Selection</button>
+                <button class="btn btn-small" onclick="downloadLines()">💾 Download</button>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="lineCanvas"></canvas>
+            </div>
         </div>
     </div>
     
     <script>
         const API_URL = 'http://localhost:5004';
-        const jobId = localStorage.getItem('dashboard_job_id');
-        const file1Name = localStorage.getItem('dashboard_file1');
-        const file2Name = localStorage.getItem('dashboard_file2');
+        let jobId = localStorage.getItem('dashboard_job_id') || 'test';
+        let file1Name = localStorage.getItem('dashboard_file1') || 'Drawing 1';
+        let file2Name = localStorage.getItem('dashboard_file2') || 'Drawing 2';
+        let cleanupScheduled = false;
         
-        if (!jobId || !file1Name || !file2Name) {
-            alert('No processed images found. Redirecting to upload page...');
-            window.location.href = 'index.html';
+        // Tool state
+        let overlayTransform = { dx: 0, dy: 0, rotation: 0, scale: 1.0, opacity: 1.0 };
+        let image1 = new Image();
+        let image2 = new Image();
+        let samPoints = [];
+        let samCurrentImage = 1;
+        let lineCurrentImage = 1;
+        let selectedLines = [];
+        
+        // Load images from test folder for development
+        image1.src = '/test/image1.png';
+        image2.src = '/test/image2.png';
+        
+        // Global function to reload an image after editing (used by all tools)
+        function reloadImage(imageNum) {
+            const timestamp = Date.now();
+            const newSrc = `/test/image${imageNum}.png?t=${timestamp}`;
+            
+            if (imageNum === 1) {
+                image1.src = newSrc;
+                // Reload in all visible canvases
+                setTimeout(() => {
+                    const overlayCanvas = document.getElementById('overlayCanvas');
+                    if (overlayCanvas && overlayCanvas.offsetParent) updateOverlay();
+                    
+                    const samCanvas = document.getElementById('samCanvas');
+                    if (samCanvas && samCanvas.offsetParent && samCurrentImage === 1) {
+                        image1.onload = () => {
+                            const ctx = samCanvas.getContext('2d');
+                            samCanvas.width = image1.width;
+                            samCanvas.height = image1.height;
+                            ctx.drawImage(image1, 0, 0);
+                        };
+                    }
+                    
+                    const lineCanvas = document.getElementById('lineCanvas');
+                    if (lineCanvas && lineCanvas.offsetParent && lineCurrentImage === 1) {
+                        image1.onload = () => {
+                            const ctx = lineCanvas.getContext('2d');
+                            lineCanvas.width = image1.width;
+                            lineCanvas.height = image1.height;
+                            ctx.drawImage(image1, 0, 0);
+                        };
+                    }
+                }, 200);
+            } else {
+                image2.src = newSrc;
+                setTimeout(() => {
+                    const overlayCanvas = document.getElementById('overlayCanvas');
+                    if (overlayCanvas && overlayCanvas.offsetParent) updateOverlay();
+                    
+                    const samCanvas = document.getElementById('samCanvas');
+                    if (samCanvas && samCanvas.offsetParent && samCurrentImage === 2) {
+                        image2.onload = () => {
+                            const ctx = samCanvas.getContext('2d');
+                            samCanvas.width = image2.width;
+                            samCanvas.height = image2.height;
+                            ctx.drawImage(image2, 0, 0);
+                        };
+                    }
+                    
+                    const lineCanvas = document.getElementById('lineCanvas');
+                    if (lineCanvas && lineCanvas.offsetParent && lineCurrentImage === 2) {
+                        image2.onload = () => {
+                            const ctx = lineCanvas.getContext('2d');
+                            lineCanvas.width = image2.width;
+                            lineCanvas.height = image2.height;
+                            ctx.drawImage(image2, 0, 0);
+                        };
+                    }
+                }, 200);
+            }
+        }
+        
+        // Auto-cleanup when window is closed
+        window.addEventListener('beforeunload', () => {
+            if (!cleanupScheduled && localStorage.getItem('dashboard_job_id')) {
+                cleanupProcessedFiles();
+            }
+        });
+        
+        // Tool switching
+        function showTool(toolName) {
+            // Update sidebar
+            document.querySelectorAll('.tool-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            // Note: No need to set active on clicked panel here since it's called programmatically
+            
+            // Update content
+            document.querySelectorAll('.tool-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`content-${toolName}`).classList.add('active');
+            
+            // Schedule cleanup when entering editing tools
+            if (localStorage.getItem('dashboard_job_id') && ['sam', 'lines', 'overlay'].includes(toolName) && !cleanupScheduled) {
+                cleanupScheduled = true;
+                setTimeout(() => cleanupProcessedFiles(), 2000);
+            }
+        }
+        
+        function switchTool(toolName) {
+            showTool(toolName);
+            
+            // Initialize tool canvases when manually switching
+            if (toolName === 'overlay') {
+                setTimeout(() => openOverlay(), 100);
+            }
+            if (toolName === 'sam') {
+                setTimeout(() => openSAM(1), 100);
+            }
+            if (toolName === 'lines') {
+                setTimeout(() => openLineSelector(1), 100);
+            }
+        }
+        
+        function loadSAMImage(imageNum) {
+            const img = document.getElementById('samImage');
+            img.src = `/test/image${imageNum}.png`;
+        }
+        
+        function loadLineImage(imageNum) {
+            const img = document.getElementById('lineImage');
+            img.src = `/test/image${imageNum}.png`;
         }
         
         // Load images
         const imagesGrid = document.getElementById('imagesGrid');
+        const img1Src = '/test/image1.png';
+        const img2Src = '/test/image2.png';
+        
         imagesGrid.innerHTML = `
             <div class="image-card">
                 <h3>Drawing 1</h3>
                 <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">${file1Name}</p>
-                <img src="${API_URL}/image/${jobId}/1" alt="Drawing 1">
+                <img src="${img1Src}" alt="Drawing 1">
                 <button class="btn" onclick="downloadImage(1)">📥 Download</button>
             </div>
             <div class="image-card">
                 <h3>Drawing 2</h3>
                 <p style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">${file2Name}</p>
-                <img src="${API_URL}/image/${jobId}/2" alt="Drawing 2">
+                <img src="${img2Src}" alt="Drawing 2">
                 <button class="btn" onclick="downloadImage(2)">📥 Download</button>
             </div>
         `;
         
         function openOverlay() {
-            localStorage.setItem('overlay_job_id', jobId);
-            alert('Overlay tool - Coming soon! (You can integrate your existing overlay.html)');
+            // Overlay tool is now integrated in the dashboard
+            showTool('overlay');
+            
+            // Initialize overlay canvas
+            setTimeout(() => {
+                const canvas = document.getElementById('overlayCanvas');
+                if (!canvas) {
+                    console.error('overlayCanvas not found!');
+                    return;
+                }
+                const ctx = canvas.getContext('2d');
+                
+                // Load both images
+                const img1 = new Image();
+                const img2 = new Image();
+                let loaded = 0;
+                
+                const drawWhenLoaded = () => {
+                    loaded++;
+                    if (loaded === 2) {
+                        canvas.width = img1.width;
+                        canvas.height = img1.height;
+                        updateOverlay();
+                    }
+                };
+                
+                img1.onload = drawWhenLoaded;
+                img2.onload = drawWhenLoaded;
+                img1.src = '/test/image1.png';
+                img2.src = '/test/image2.png';
+                image1 = img1;
+                image2 = img2;
+            }, 100);
+        }
+        
+        function updateOverlay() {
+            const canvas = document.getElementById('overlayCanvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            overlayTransform.dx = parseFloat(document.getElementById('dxSlider').value);
+            overlayTransform.dy = parseFloat(document.getElementById('dySlider').value);
+            overlayTransform.rotation = parseFloat(document.getElementById('rotationSlider').value);
+            overlayTransform.scale = parseFloat(document.getElementById('scaleSlider').value);
+            overlayTransform.opacity = parseFloat(document.getElementById('opacitySlider').value);
+            
+            document.getElementById('dxValue').textContent = overlayTransform.dx;
+            document.getElementById('dyValue').textContent = overlayTransform.dy;
+            document.getElementById('rotationValue').textContent = overlayTransform.rotation;
+            document.getElementById('scaleValue').textContent = overlayTransform.scale.toFixed(2);
+            document.getElementById('opacityValue').textContent = overlayTransform.opacity.toFixed(2);
+            
+            if (!image1.complete || !image2.complete) return;
+            
+            // Black background
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw first image in GREEN
+            ctx.save();
+            ctx.globalAlpha = 1.0;
+            ctx.globalCompositeOperation = 'lighter';
+            
+            // Create temporary canvas to apply green filter
+            const tempCanvas1 = document.createElement('canvas');
+            tempCanvas1.width = canvas.width;
+            tempCanvas1.height = canvas.height;
+            const tempCtx1 = tempCanvas1.getContext('2d');
+            tempCtx1.drawImage(image1, 0, 0);
+            tempCtx1.globalCompositeOperation = 'multiply';
+            tempCtx1.fillStyle = '#00ff00';
+            tempCtx1.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.drawImage(tempCanvas1, 0, 0);
+            ctx.restore();
+            
+            // Draw second image in PINK with transforms
+            ctx.save();
+            ctx.translate(canvas.width / 2 + overlayTransform.dx, canvas.height / 2 + overlayTransform.dy);
+            ctx.rotate((overlayTransform.rotation * Math.PI) / 180);
+            ctx.scale(overlayTransform.scale, overlayTransform.scale);
+            ctx.translate(-canvas.width / 2, -canvas.height / 2);
+            
+            ctx.globalAlpha = overlayTransform.opacity;
+            ctx.globalCompositeOperation = 'lighter';
+            
+            // Create temporary canvas to apply pink filter
+            const tempCanvas2 = document.createElement('canvas');
+            tempCanvas2.width = canvas.width;
+            tempCanvas2.height = canvas.height;
+            const tempCtx2 = tempCanvas2.getContext('2d');
+            tempCtx2.drawImage(image2, 0, 0);
+            tempCtx2.globalCompositeOperation = 'multiply';
+            tempCtx2.fillStyle = '#ff00ff';
+            tempCtx2.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.drawImage(tempCanvas2, 0, 0);
+            ctx.restore();
+        }
+        
+        function resetOverlay() {
+            overlayTransform = { dx: 0, dy: 0, rotation: 0, scale: 1.0, opacity: 1.0 };
+            document.getElementById('dxSlider').value = 0;
+            document.getElementById('dySlider').value = 0;
+            document.getElementById('rotationSlider').value = 0;
+            document.getElementById('scaleSlider').value = 1.0;
+            document.getElementById('opacitySlider').value = 1.0;
+            updateOverlay();
+        }
+        
+        function downloadOverlay() {
+            const canvas = document.getElementById('overlayCanvas');
+            const link = document.createElement('a');
+            link.download = 'overlay-comparison.png';
+            link.href = canvas.toDataURL();
+            link.click();
         }
         
         function openSAM(imageNum) {
-            const imageUrl = `${API_URL}/image/${jobId}/${imageNum}`;
-            localStorage.setItem('sam_image_url', imageUrl);
-            alert('SAM Remover tool - Coming soon! (You can integrate your existing SAM remover)');
+            samCurrentImage = imageNum;
+            showTool('sam');
+            
+            setTimeout(() => {
+                const canvas = document.getElementById('samCanvas');
+                const ctx = canvas.getContext('2d');
+                const img = imageNum === 1 ? image1 : image2;
+                
+                if (img.complete) {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    samPoints = [];
+                    document.getElementById('samStatus').textContent = 'Click to select points';
+                } else {
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        samPoints = [];
+                        document.getElementById('samStatus').textContent = 'Click to select points';
+                    };
+                }
+            }, 100);
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const samCanvas = document.getElementById('samCanvas');
+            if (samCanvas) {
+                samCanvas.addEventListener('click', (e) => {
+                    const canvas = e.target;
+                    const rect = canvas.getBoundingClientRect();
+                    const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+                    const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+                    
+                    const label = document.querySelector('input[name="samMode"]:checked').value === 'include' ? 1 : 0;
+                    samPoints.push({ x, y, label });
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = label === 1 ? '#00ff00' : '#ff0000';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    document.getElementById('samStatus').textContent = `${samPoints.length} points selected`;
+                });
+            }
+        });
+        
+        async function applySAMMask() {
+            if (samPoints.length === 0) {
+                alert('Please select at least one point on the image');
+                return;
+            }
+            
+            document.getElementById('samStatus').textContent = 'Generating mask...';
+            
+            try {
+                const response = await fetch('http://localhost:5001/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        image_num: samCurrentImage,
+                        points: samPoints
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.getElementById('samCanvas');
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        samPoints = [];
+                        document.getElementById('samStatus').textContent = 'Mask applied successfully';
+                        
+                        // Reload image globally so overlay sees the edit
+                        reloadImage(samCurrentImage);
+                    };
+                    img.src = `${API_URL}/image/${jobId}/${samCurrentImage}?t=${Date.now()}`;
+                } else {
+                    document.getElementById('samStatus').textContent = 'Error: ' + data.message;
+                }
+            } catch (error) {
+                document.getElementById('samStatus').textContent = 'SAM server not running (port 5001)';
+                console.error(error);
+            }
+        }
+        
+        function resetSAM() {
+            samPoints = [];
+            const canvas = document.getElementById('samCanvas');
+            const ctx = canvas.getContext('2d');
+            const img = samCurrentImage === 1 ? image1 : image2;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            document.getElementById('samStatus').textContent = 'Points cleared';
+        }
+        
+        function downloadSAM() {
+            const canvas = document.getElementById('samCanvas');
+            const link = document.createElement('a');
+            link.download = `sam-image-${samCurrentImage}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
         }
         
         function openLineSelector(imageNum) {
-            const imageUrl = `${API_URL}/image/${jobId}/${imageNum}`;
-            localStorage.setItem('line_selector_image_url', imageUrl);
-            alert('Line Selector tool - Coming soon! (You can integrate your existing line selector)');
+            lineCurrentImage = imageNum;
+            showTool('lines');
+            
+            setTimeout(() => {
+                const canvas = document.getElementById('lineCanvas');
+                const ctx = canvas.getContext('2d');
+                const img = imageNum === 1 ? image1 : image2;
+                
+                // Set up click handler
+                canvas.onclick = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+                    const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+                    
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Get pixel data to detect lines
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const pixels = imageData.data;
+                    
+                    // Check if clicked on a dark pixel (potential line)
+                    const idx = (y * canvas.width + x) * 4;
+                    const r = pixels[idx];
+                    const g = pixels[idx + 1];
+                    const b = pixels[idx + 2];
+                    const brightness = (r + g + b) / 3;
+                    
+                    if (brightness < 128) { // Dark pixel = line detected
+                        // Find connected line pixels using flood fill
+                        const linePixels = findConnectedLine(imageData, x, y, 30); // 30px radius
+                        
+                        if (linePixels.length > 0) {
+                            selectedLines.push({ x, y, pixels: linePixels });
+                            
+                            // Draw red highlight over detected line
+                            ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+                            ctx.lineWidth = 3;
+                            linePixels.forEach((point, i) => {
+                                if (i === 0) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(point.x, point.y);
+                                } else {
+                                    ctx.lineTo(point.x, point.y);
+                                }
+                            });
+                            ctx.stroke();
+                            
+                            // Draw marker at click point
+                            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+                            ctx.beginPath();
+                            ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                            ctx.fill();
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 2;
+                            ctx.stroke();
+                            
+                            document.getElementById('lineStatus').textContent = `${selectedLines.length} line(s) selected - Click "Remove Lines" to delete`;
+                        } else {
+                            document.getElementById('lineStatus').textContent = 'No line detected at this point - Click on a darker line';
+                        }
+                    } else {
+                        document.getElementById('lineStatus').textContent = 'Click on a dark line to select it';
+                    }
+                };
+                
+                if (img.complete) {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    selectedLines = [];
+                    document.getElementById('lineStatus').textContent = 'Click on lines to select them for removal';
+                } else {
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        selectedLines = [];
+                        document.getElementById('lineStatus').textContent = 'Click on lines to select them for removal';
+                    };
+                }
+            }, 100);
+        }
+        
+        // Helper function to find connected line pixels - traces entire line
+        function findConnectedLine(imageData, startX, startY, radius) {
+            const pixels = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const linePixels = [];
+            const visited = new Set();
+            const queue = [{ x: startX, y: startY }];
+            
+            // Breadth-first search to find all connected dark pixels
+            while (queue.length > 0) {
+                const { x, y } = queue.shift();
+                const key = `${x},${y}`;
+                
+                if (visited.has(key)) continue;
+                if (x < 0 || x >= width || y < 0 || y >= height) continue;
+                
+                visited.add(key);
+                
+                const idx = (y * width + x) * 4;
+                const r = pixels[idx];
+                const g = pixels[idx + 1];
+                const b = pixels[idx + 2];
+                const brightness = (r + g + b) / 3;
+                
+                if (brightness < 128) { // Dark pixel = part of line
+                    linePixels.push({ x, y });
+                    
+                    // Check 8 neighboring pixels
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            const nkey = `${nx},${ny}`;
+                            if (!visited.has(nkey)) {
+                                queue.push({ x: nx, y: ny });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return linePixels;
+        }
+        
+        async function removeSelectedLines() {
+            if (selectedLines.length === 0) {
+                alert('Please click on lines to select them first');
+                return;
+            }
+            
+            document.getElementById('lineStatus').textContent = 'Removing selected lines...';
+            
+            try {
+                const canvas = document.getElementById('lineCanvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Remove each selected line by drawing white over it
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                selectedLines.forEach(line => {
+                    if (line.pixels && line.pixels.length > 0) {
+                        // Draw white over all detected line pixels
+                        line.pixels.forEach(point => {
+                            ctx.fillRect(point.x - 3, point.y - 3, 6, 6);
+                        });
+                    } else {
+                        // Fallback: draw circle at point
+                        ctx.beginPath();
+                        ctx.arc(line.x, line.y, 15, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                });
+                
+                // Update global image with edited version
+                const img = lineCurrentImage === 1 ? image1 : image2;
+                img.src = canvas.toDataURL();
+                
+                selectedLines = [];
+                document.getElementById('lineStatus').textContent = `Lines removed! Changes reflected in overlay.`;
+                
+                // Reload image everywhere
+                setTimeout(() => reloadImage(lineCurrentImage), 100);
+                    
+            } catch (error) {
+                document.getElementById('lineStatus').textContent = 'Error removing lines';
+                console.error(error);
+            }
+        }
+        
+        function clearLineSelection() {
+            selectedLines = [];
+            const canvas = document.getElementById('lineCanvas');
+            const ctx = canvas.getContext('2d');
+            const img = lineCurrentImage === 1 ? image1 : image2;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            document.getElementById('lineStatus').textContent = 'Selection cleared';
+        }
+        
+        function downloadLines() {
+            const canvas = document.getElementById('lineCanvas');
+            const link = document.createElement('a');
+            link.download = `lines-image-${lineCurrentImage}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
         }
         
         async function downloadImage(imageNum) {
@@ -225,18 +1005,27 @@
             }
         }
         
-        async function cleanupOldFiles() {
-            if (!confirm('Remove all old processed files? (Current job will be kept)')) return;
+        async function cleanupProcessedFiles() {
+            // Silent cleanup of current job's processed folder
+            try {
+                await fetch(`${API_URL}/cleanup/${jobId}`, { method: 'DELETE' });
+                console.log('Processed files cleaned up');
+            } catch (error) {
+                console.log('Cleanup error:', error);
+            }
+        }
+        
+        async function cleanupNow() {
+            if (!confirm('Delete all processed files now?')) return;
             
             try {
-                const response = await fetch(`${API_URL}/cleanup-all`, {
+                await fetch(`${API_URL}/cleanup-all`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ active_job_ids: [jobId] })
+                    body: JSON.stringify({ active_job_ids: [] })
                 });
-                
-                const data = await response.json();
-                alert(`Cleanup complete! Removed ${data.processed_folders_removed} folders.`);
+                alert('All processed files deleted!');
+                startOver();
             } catch (error) {
                 alert('Failed to cleanup files');
             }
