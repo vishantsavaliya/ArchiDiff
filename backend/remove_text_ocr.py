@@ -13,7 +13,7 @@ import sys
 MASK_DILATION = 3
 USE_WHITE_FILL = True  # True = white fill, False = inpaint (blur)
 INPAINT_RADIUS = 7  # Only used if USE_WHITE_FILL = False
-TWO_PASS = True  # Run OCR twice to catch remaining text
+TWO_PASS = False  # Single pass is sufficient for upscaled images
 
 def remove_text_easyocr(image_path, output_path):
     """Remove text using EasyOCR detection + cv2.inpaint"""
