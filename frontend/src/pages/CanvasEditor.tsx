@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusMessage } from '../components/StatusMessage';
 import { imageEditorService, type Layer } from '../services/imageEditorService';
+import { WebGLRenderer } from '../utils/webglRenderer';
 
 const TEST_MODE = !localStorage.getItem('dashboard_job_id');
 
@@ -25,10 +26,22 @@ export const CanvasEditor: React.FC = () => {
   
   const [images, setImages] = useState<Record<number, HTMLImageElement>>({});
   const [processedImages, setProcessedImages] = useState<Record<number, HTMLCanvasElement>>({});
-  const [currentTool, setCurrentTool] = useState<'overlay' | 'erase' | 'brush' | 'select'>('overlay');
-  const [brushSize, setBrushSize] = useState(5);
-  const [brushColor, setBrushColor] = useState<'red' | 'green'>('red');
+  const [editableImages, setEditableImages] = useState<Record<number, HTMLCanvasElement>>({});
+  const [eraseLayer, setEraseLayer] = useState<Record<number, HTMLCanvasElement>>({});
+  const [undoHistory, setUndoHistory] = useState<Array<{ layerId: number; imageData: ImageData }>>([]);
+  const [redoHistory, setRedoHistory] = useState<Array<{ layerId: number; imageData: ImageData }>>([]);
+  const MAX_UNDO_HISTORY = 10; // Limit to prevent memory issues
+  const [currentTool, setCurrentTool] = useState<'overlay' | 'edit'>('overlay');
+  const [editSubTool, setEditSubTool] = useState<'brush' | 'box' | 'line'>('brush');
+  const [brushSize, setBrushSize] = useState(20);
   const [loading, setLoading] = useState(true);
+  const [isErasing, setIsErasing] = useState(false);
+  const [boxStart, setBoxStart] = useState<{ x: number; y: number } | null>(null);
+  const [boxEnd, setBoxEnd] = useState<{ x: number; y: number } | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [detectedLines, setDetectedLines] = useState<Array<{x1: number; y1: number; x2: number; y2: number}>>([]);
+  const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>({
     type: 'info',
     text: 'Loading images...',
@@ -41,6 +54,10 @@ export const CanvasEditor: React.FC = () => {
   const renderRequestRef = useRef<number | null>(null);
   const pendingTransformRef = useRef<{ dx: number; dy: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const boxPosRef = useRef<{ start: { x: number; y: number } | null; end: { x: number; y: number } | null }>({ start: null, end: null });
+  const webglRendererRef = useRef<WebGLRenderer | null>(null);
+  const [useWebGL, setUseWebGL] = useState(true);
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1.0 });
 
   const jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
   const activeLayerId = layers[1].active ? 1 : 2;
@@ -50,7 +67,11 @@ export const CanvasEditor: React.FC = () => {
     const canvas = canvasRef.current;
     if (!canvas || !images[1] || !images[2]) return;
 
-    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    // Cache context
+    if (!canvasCtxRef.current) {
+      canvasCtxRef.current = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    }
+    const ctx = canvasCtxRef.current;
     if (!ctx) return;
 
     // Set canvas size only if changed
@@ -59,7 +80,12 @@ export const CanvasEditor: React.FC = () => {
     if (canvas.width !== maxWidth || canvas.height !== maxHeight) {
       canvas.width = maxWidth;
       canvas.height = maxHeight;
+      canvasCtxRef.current = null; // Reset context on resize
+      return renderCanvas(); // Re-render after resize
     }
+
+    // Disable image smoothing for better performance on large images
+    ctx.imageSmoothingEnabled = false;
 
     // Clear canvas with black background
     ctx.fillStyle = 'black';
@@ -68,9 +94,9 @@ export const CanvasEditor: React.FC = () => {
     // Draw layers in specified order
     layerOrder.forEach((layerId) => {
       const layer = layers[layerId];
-      const img = currentTool === 'overlay' && processedImages[layerId] 
-        ? processedImages[layerId] 
-        : images[layerId];
+      // Always use editableImages if they exist (they contain any edits made)
+      // Fall back to processedImages or original images if no edits have been made
+      const img = editableImages[layerId] || processedImages[layerId] || images[layerId];
       if (!layer.visible || !img) return;
 
       ctx.save();
@@ -87,7 +113,57 @@ export const CanvasEditor: React.FC = () => {
       ctx.drawImage(img, -centerX, -centerY);
       ctx.restore();
     });
-  }, [images, layers, currentTool, layerOrder, processedImages]);
+
+    // Draw box selection outline if dragging (after transforms are reset)
+    const currentBoxStart = boxPosRef.current.start || boxStart;
+    const currentBoxEnd = boxPosRef.current.end || boxEnd;
+    if (currentTool === 'edit' && editSubTool === 'box' && currentBoxStart && currentBoxEnd) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw in canvas pixel space
+      
+      // Make it VERY visible for debugging
+      ctx.strokeStyle = '#ffffff';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; // Semi-transparent white fill
+      ctx.lineWidth = 5; // Thicker line
+      ctx.setLineDash([10, 5]);
+      
+      const width = currentBoxEnd.x - currentBoxStart.x;
+      const height = currentBoxEnd.y - currentBoxStart.y;
+      
+      // Draw filled rectangle first
+      ctx.fillRect(currentBoxStart.x, currentBoxStart.y, width, height);
+      // Then stroke  
+      ctx.strokeRect(currentBoxStart.x, currentBoxStart.y, width, height);
+      
+      ctx.restore();
+    }
+
+    // Draw brush cursor preview (after transforms are reset)
+    if (currentTool === 'edit' && editSubTool === 'brush' && cursorPos) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw in canvas pixel space
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cursorPos.x, cursorPos.y, brushSize, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Draw detected lines for line selection
+    if (currentTool === 'edit' && editSubTool === 'line' && detectedLines.length > 0) {
+      ctx.save();
+      ctx.lineWidth = 3;
+      detectedLines.forEach((line, idx) => {
+        ctx.strokeStyle = selectedLines.has(idx) ? '#00ff00' : '#888888';
+        ctx.beginPath();
+        ctx.moveTo(line.x1, line.y1);
+        ctx.lineTo(line.x2, line.y2);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+  }, [images, layers, currentTool, layerOrder, processedImages, editableImages, eraseLayer, editSubTool, boxStart, boxEnd, detectedLines, selectedLines, cursorPos, brushSize]);
 
   const loadImages = useCallback(async () => {
     try {
@@ -198,6 +274,32 @@ export const CanvasEditor: React.FC = () => {
       2: processImage(img2, false),
     };
     setProcessedImages(processed);
+    
+    // Create editable canvases from the processed (red/green) images
+    const editCanvas1 = document.createElement('canvas');
+    editCanvas1.width = processed[1].width;
+    editCanvas1.height = processed[1].height;
+    const ctx1 = editCanvas1.getContext('2d');
+    if (ctx1) ctx1.drawImage(processed[1], 0, 0);
+    
+    const editCanvas2 = document.createElement('canvas');
+    editCanvas2.width = processed[2].width;
+    editCanvas2.height = processed[2].height;
+    const ctx2 = editCanvas2.getContext('2d');
+    if (ctx2) ctx2.drawImage(processed[2], 0, 0);
+    
+    setEditableImages({ 1: editCanvas1, 2: editCanvas2 });
+    
+    // Create transparent erase layers
+    const eraseCanvas1 = document.createElement('canvas');
+    eraseCanvas1.width = processed[1].width;
+    eraseCanvas1.height = processed[1].height;
+    
+    const eraseCanvas2 = document.createElement('canvas');
+    eraseCanvas2.width = processed[2].width;
+    eraseCanvas2.height = processed[2].height;
+    
+    setEraseLayer({ 1: eraseCanvas1, 2: eraseCanvas2 });
   };
 
   // Load images on mount
@@ -272,12 +374,79 @@ export const CanvasEditor: React.FC = () => {
 
   // Mouse dragging handlers with throttled updates
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (currentTool !== 'overlay') return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    if (currentTool === 'overlay') {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+    } else if (currentTool === 'edit') {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const canvasX = (e.clientX - rect.left) * scaleX;
+      const canvasY = (e.clientY - rect.top) * scaleY;
+
+      if (editSubTool === 'brush') {
+        // Save undo state before brushing
+        saveUndoState();
+        setIsErasing(true);
+        eraseAtPoint(e);
+      } else if (editSubTool === 'box') {
+        // Start box selection
+        const pos = { x: canvasX, y: canvasY };
+        setBoxStart(pos);
+        setBoxEnd(pos);
+        boxPosRef.current = { start: pos, end: pos };
+      } else if (editSubTool === 'line') {
+        // Find and toggle line near click
+        const lineIdx = findLineNearPoint(canvasX, canvasY);
+        if (lineIdx !== null) {
+          setSelectedLines(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(lineIdx)) {
+              newSet.delete(lineIdx);
+            } else {
+              newSet.add(lineIdx);
+            }
+            return newSet;
+          });
+          renderCanvas();
+        }
+      }
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+
+    if (currentTool === 'edit') {
+      // Update cursor position for brush preview
+      if (editSubTool === 'brush') {
+        setCursorPos({ x: canvasX, y: canvasY });
+        if (isErasing) {
+          eraseAtPoint(e);
+        } else {
+          renderCanvas();
+        }
+        return;
+      } else if (editSubTool === 'box' && boxStart) {
+        // Update box end position immediately via ref for real-time feedback
+        const pos = { x: canvasX, y: canvasY };
+        boxPosRef.current.end = pos;
+        setBoxEnd(pos);
+        renderCanvas();
+        return;
+      }
+    }
+    
     if (!isDragging || !dragStart || currentTool !== 'overlay') return;
 
     const dx = e.clientX - dragStart.x;
@@ -316,13 +485,176 @@ export const CanvasEditor: React.FC = () => {
   };
 
   const handleMouseUp = () => {
+    if (currentTool === 'edit' && editSubTool === 'box' && boxStart && boxEnd) {
+      // Erase everything in the box
+      saveUndoState();
+      eraseBox();
+      setBoxStart(null);
+      setBoxEnd(null);
+      boxPosRef.current = { start: null, end: null };
+    }
+    
     setIsDragging(false);
+    setIsErasing(false);
     setDragStart(null);
     pendingTransformRef.current = null;
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+  };
+
+  const handleMouseLeave = () => {
+    handleMouseUp();
+    setCursorPos(null);
+  };
+
+  const saveUndoState = () => {
+    const canvas = editableImages[activeLayerId];
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        setUndoHistory(prev => {
+          const newHistory = [...prev, { layerId: activeLayerId, imageData }];
+          return newHistory.slice(-MAX_UNDO_HISTORY);
+        });
+        setRedoHistory([]);
+      }
+    }
+  };
+
+  const eraseBox = () => {
+    if (!boxStart || !boxEnd) return;
+
+    const canvas = editableImages[activeLayerId];
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const x = Math.min(boxStart.x, boxEnd.x);
+    const y = Math.min(boxStart.y, boxEnd.y);
+    const width = Math.abs(boxEnd.x - boxStart.x);
+    const height = Math.abs(boxEnd.y - boxStart.y);
+
+    // Erase rectangle area
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(x, y, width, height);
+    ctx.globalCompositeOperation = 'source-over';
+
+    renderCanvas();
+    setMessage({ type: 'success', text: 'Box erased' });
+  };
+
+  const findLineNearPoint = (x: number, y: number, threshold = 15): number | null => {
+    let minDist = Infinity;
+    let nearestIdx: number | null = null;
+
+    detectedLines.forEach((line, idx) => {
+      const dist = pointToSegmentDistance(x, y, line.x1, line.y1, line.x2, line.y2);
+      if (dist < minDist && dist < threshold) {
+        minDist = dist;
+        nearestIdx = idx;
+      }
+    });
+
+    return nearestIdx;
+  };
+
+  const pointToSegmentDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number): number => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    if (dx === 0 && dy === 0) {
+      return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    }
+
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+    const closestX = x1 + t * dx;
+    const closestY = y1 + t * dy;
+
+    return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+  };
+
+  const eraseSelectedLines = () => {
+    if (selectedLines.size === 0) {
+      setMessage({ type: 'error', text: 'No lines selected' });
+      return;
+    }
+
+    saveUndoState();
+
+    const canvas = editableImages[activeLayerId];
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = 5;
+
+    selectedLines.forEach(idx => {
+      const line = detectedLines[idx];
+      if (line) {
+        ctx.beginPath();
+        ctx.moveTo(line.x1, line.y1);
+        ctx.lineTo(line.x2, line.y2);
+        ctx.stroke();
+      }
+    });
+
+    ctx.globalCompositeOperation = 'source-over';
+    
+    setSelectedLines(new Set());
+    renderCanvas();
+    setMessage({ type: 'success', text: `${selectedLines.size} line(s) erased` });
+  };
+
+  const detectLinesOnCanvas = () => {
+    const canvas = editableImages[activeLayerId];
+    if (!canvas) return;
+
+    // Create a temporary canvas for edge detection
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+    if (!tempCtx) return;
+
+    tempCtx.drawImage(canvas, 0, 0);
+    const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Simple line detection - find continuous colored pixels
+    // This is a simplified version - in production you'd use the backend
+    const lines: Array<{x1: number; y1: number; x2: number; y2: number}> = [];
+    
+    // For now, we'll detect horizontal and vertical lines
+    // You can enhance this with proper line detection algorithm
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Detect horizontal lines
+    for (let y = 0; y < height; y += 10) {
+      let lineStart = null;
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const isColored = data[idx] > 100 || data[idx + 1] > 100 || data[idx + 2] > 100;
+        
+        if (isColored && lineStart === null) {
+          lineStart = x;
+        } else if (!isColored && lineStart !== null) {
+          if (x - lineStart > 20) {
+            lines.push({ x1: lineStart, y1: y, x2: x, y2: y });
+          }
+          lineStart = null;
+        }
+      }
+    }
+
+    setDetectedLines(lines);
+    setMessage({ type: 'success', text: `Detected ${lines.length} lines` });
   };
 
   const swapLayerOrder = () => {
@@ -339,6 +671,86 @@ export const CanvasEditor: React.FC = () => {
         text: `Layer order swapped` 
       });
     }, 300);
+  };
+
+  const eraseAtPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const editCanvas = editableImages[activeLayerId];
+    if (!canvas || !editCanvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // Use willReadFrequently only for erase operations
+    const ctx = editCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    // Erase in a circle on the editable image
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Trigger re-render
+    renderCanvas();
+  };
+
+  const undo = () => {
+    if (undoHistory.length === 0) return;
+
+    const lastState = undoHistory[undoHistory.length - 1];
+    const canvas = editableImages[lastState.layerId];
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Save current state to redo history (limit to MAX_UNDO_HISTORY)
+    const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    setRedoHistory(prev => {
+      const newHistory = [...prev, { layerId: lastState.layerId, imageData: currentImageData }];
+      return newHistory.slice(-MAX_UNDO_HISTORY);
+    });
+
+    // Restore previous state
+    ctx.putImageData(lastState.imageData, 0, 0);
+
+    // Remove from undo history
+    setUndoHistory(prev => prev.slice(0, -1));
+
+    renderCanvas();
+    setMessage({ type: 'success', text: 'Undo' });
+  };
+
+  const redo = () => {
+    if (redoHistory.length === 0) return;
+
+    const nextState = redoHistory[redoHistory.length - 1];
+    const canvas = editableImages[nextState.layerId];
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Save current state to undo history (limit to MAX_UNDO_HISTORY)
+    const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    setUndoHistory(prev => {
+      const newHistory = [...prev, { layerId: nextState.layerId, imageData: currentImageData }];
+      return newHistory.slice(-MAX_UNDO_HISTORY);
+    });
+
+    // Restore next state
+    ctx.putImageData(nextState.imageData, 0, 0);
+
+    // Remove from redo history
+    setRedoHistory(prev => prev.slice(0, -1));
+
+    renderCanvas();
+    setMessage({ type: 'success', text: 'Redo' });
   };
 
   const convertLayer2ToGreen = async () => {
@@ -380,39 +792,15 @@ export const CanvasEditor: React.FC = () => {
         </button>
         
         <button
-          onClick={() => setCurrentTool('brush')}
+          onClick={() => setCurrentTool('edit')}
           className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'brush' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
+            currentTool === 'edit' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
           }`}
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
-          <span className="text-xs">Brush</span>
-        </button>
-        
-        <button
-          onClick={() => setCurrentTool('erase')}
-          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'erase' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
-          }`}
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          <span className="text-xs">Erase</span>
-        </button>
-        
-        <button
-          onClick={() => setCurrentTool('select')}
-          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'select' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
-          }`}
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-          </svg>
-          <span className="text-xs">Select</span>
+          <span className="text-xs">Edit</span>
         </button>
         
         <div className="flex-1" />
@@ -440,15 +828,14 @@ export const CanvasEditor: React.FC = () => {
             ref={canvasRef}
             className={`bg-white shadow-2xl ${
               currentTool === 'overlay' ? 'cursor-move' : 
-              currentTool === 'brush' ? 'cursor-crosshair' : 
-              currentTool === 'erase' ? 'cursor-pointer' : 
+              currentTool === 'edit' ? 'cursor-crosshair' : 
               'cursor-default'
             }`}
             style={{ maxWidth: '100%', maxHeight: '100%' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
           />
         </div>
       </div>
@@ -614,6 +1001,128 @@ export const CanvasEditor: React.FC = () => {
               >
                 Reset Transform
               </button>
+
+              <button
+                onClick={downloadCanvas}
+                className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 text-sm"
+              >
+                Download Canvas
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Controls */}
+        {currentTool === 'edit' && (
+          <div className="p-5 border-b border-gray-700">
+            <h3 className="text-sm font-semibold mb-4 text-gray-300">Edit Tools</h3>
+
+            <div className="space-y-4">
+              {/* Sub-tool Selection */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setEditSubTool('brush')}
+                  className={`p-3 rounded-lg transition text-xs flex flex-col items-center ${
+                    editSubTool === 'brush' ? 'bg-indigo-600 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3" strokeWidth="2" />
+                  </svg>
+                  Brush
+                </button>
+                <button
+                  onClick={() => setEditSubTool('box')}
+                  className={`p-3 rounded-lg transition text-xs flex flex-col items-center ${
+                    editSubTool === 'box' ? 'bg-indigo-600 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="4" y="4" width="16" height="16" strokeWidth="2" />
+                  </svg>
+                  Box
+                </button>
+                <button
+                  onClick={() => setEditSubTool('line')}
+                  className={`p-3 rounded-lg transition text-xs flex flex-col items-center ${
+                    editSubTool === 'line' ? 'bg-indigo-600 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 20L20 4" />
+                  </svg>
+                  Line
+                </button>
+              </div>
+
+              {/* Brush Size (only for brush tool) */}
+              {editSubTool === 'brush' && (
+                <div>
+                  <label className="text-xs text-gray-400 flex justify-between mb-1">
+                    <span>Eraser Size</span>
+                    <span>{brushSize}px</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="100"
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+              )}
+
+              {/* Line tool controls */}
+              {editSubTool === 'line' && (
+                <div className="space-y-2">
+                  <button
+                    onClick={detectLinesOnCanvas}
+                    className="w-full bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 text-sm"
+                  >
+                    Detect Lines
+                  </button>
+                  {detectedLines.length > 0 && (
+                    <>
+                      <div className="text-xs text-gray-400 text-center">
+                        {detectedLines.length} lines detected, {selectedLines.size} selected
+                      </div>
+                      <button
+                        onClick={eraseSelectedLines}
+                        disabled={selectedLines.size === 0}
+                        className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Erase Selected Lines
+                      </button>
+                      <button
+                        onClick={() => setSelectedLines(new Set())}
+                        disabled={selectedLines.size === 0}
+                        className="w-full bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Clear Selection
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Undo/Redo */}
+              <div className="flex gap-2">
+                <button
+                  onClick={undo}
+                  disabled={undoHistory.length === 0}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ↶ Undo
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={redoHistory.length === 0}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ↷ Redo
+                </button>
+              </div>
 
               <button
                 onClick={downloadCanvas}

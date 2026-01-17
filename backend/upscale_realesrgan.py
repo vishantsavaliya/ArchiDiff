@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Real-ESRGAN Image Upscaling
-Upscale images 4x using Real-ESRGAN for better quality before processing
+Upscale images 1.5x using bicubic interpolation for better quality before processing
 """
 
 import cv2
@@ -100,14 +100,14 @@ class RealESRGAN:
             return cv2.resize(image, (w * 4, h * 4), interpolation=cv2.INTER_CUBIC)
 
 
-def upscale_image(input_path, output_path, scale=4):
+def upscale_image(input_path, output_path, scale=1.5):
     """
-    Upscale a single image using Real-ESRGAN
+    Upscale a single image using bicubic interpolation
     
     Args:
         input_path: Path to input image
         output_path: Path to save upscaled image
-        scale: Upscaling factor (default: 4)
+        scale: Upscaling factor (default: 1.5)
     """
     print(f"\nUpscaling: {input_path}")
     print(f"Scale: {scale}x")
@@ -136,14 +136,14 @@ def upscale_image(input_path, output_path, scale=4):
     return True
 
 
-def upscale_directory(input_dir, output_dir, scale=4):
+def upscale_directory(input_dir, output_dir, scale=2):
     """
     Upscale all images in a directory
     
     Args:
         input_dir: Directory containing input images
         output_dir: Directory to save upscaled images
-        scale: Upscaling factor (default: 4)
+        scale: Upscaling factor (default: 1.5)
     """
     input_path = Path(input_dir)
     output_path = Path(output_dir)
@@ -187,19 +187,19 @@ def main():
         print("\nExamples:")
         print("  python3 upscale_realesrgan.py image.png")
         print("  python3 upscale_realesrgan.py image.png upscaled.png")
-        print("  python3 upscale_realesrgan.py image.png upscaled.png 2")
-        print("  python3 upscale_realesrgan.py converted/ upscaled/ 4")
+        print("  python3 upscale_realesrgan.py image.png upscaled.png 1.5")
+        print("  python3 upscale_realesrgan.py converted/ upscaled/ 1.5")
         sys.exit(1)
     
     input_path = sys.argv[1]
     
     # Determine scale
-    scale = 4
+    scale = 1.5
     if len(sys.argv) >= 4:
         try:
-            scale = int(sys.argv[3])
+            scale = float(sys.argv[3])
         except ValueError:
-            print(f"Warning: Invalid scale '{sys.argv[3]}', using default 4x")
+            print(f"Warning: Invalid scale '{sys.argv[3]}', using default 1.5x")
     
     # Check if input is directory or file
     if os.path.isdir(input_path):
