@@ -65,9 +65,9 @@ def load_images():
         
         # Check if files exist, if not use test images
         if not layer1_path.exists():
-            layer1_path = Path(__file__).parent.parent / 'frontend-lite' / 'test' / 'image1.png'
+            layer1_path = Path(__file__).parent.parent / 'frontend' / 'public' / 'test' / 'image1.png'
         if not layer2_path.exists():
-            layer2_path = Path(__file__).parent.parent / 'frontend-lite' / 'test' / 'image2.png'
+            layer2_path = Path(__file__).parent.parent / 'frontend' / 'public' / 'test' / 'image2.png'
         
         success1 = state.load_image(1, layer1_path)
         success2 = state.load_image(2, layer2_path)
