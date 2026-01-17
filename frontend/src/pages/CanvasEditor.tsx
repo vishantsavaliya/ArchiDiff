@@ -34,6 +34,8 @@ export const CanvasEditor: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [layerOrder, setLayerOrder] = useState<[number, number]>([1, 2]); // [bottom, top]
+  const [visualLayerOrder, setVisualLayerOrder] = useState<[number, number]>([1, 2]); // UI display order
+  const [isSwapping, setIsSwapping] = useState(false);
   const renderRequestRef = useRef<number | null>(null);
   const pendingTransformRef = useRef<{ dx: number; dy: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -314,11 +316,19 @@ export const CanvasEditor: React.FC = () => {
   };
 
   const swapLayerOrder = () => {
+    setIsSwapping(true);
+    // Update canvas render order immediately
     setLayerOrder((prev) => [prev[1], prev[0]]);
-    setMessage({ 
-      type: 'success', 
-      text: `Layer ${layerOrder[1]} is now on top` 
-    });
+    
+    // Wait for animation to complete, then update visual order
+    setTimeout(() => {
+      setVisualLayerOrder((prev) => [prev[1], prev[0]]);
+      setIsSwapping(false);
+      setMessage({ 
+        type: 'success', 
+        text: `Layer order swapped` 
+      });
+    }, 300);
   };
 
   const convertLayer2ToGreen = async () => {
@@ -408,67 +418,53 @@ export const CanvasEditor: React.FC = () => {
         <div className="p-5 border-b border-gray-200">
           <h3 className="text-sm font-semibold mb-4 text-gray-700">Layers</h3>
 
-          <div
-            onClick={() => setActiveLayer(1)}
-            className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
-              layers[1].active ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-            }`}
-          >
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleLayerVisibility(1);
-              }}
-              className={`text-xl mr-3 cursor-pointer ${
-                layers[1].active ? 'text-white' : 'text-gray-900'
-              }`}
-            >
-              {layers[1].visible ? '●' : '○'}
-            </span>
-            <div className="flex-1">
-              <div className="font-medium text-sm">Layer 1</div>
-              <div className="text-xs opacity-70">
-                Drawing 1 {layers[1].active && '• Active'}
-              </div>
-            </div>
-          </div>
-
-          {/* Swap Button */}
-          <div className="flex justify-center my-2">
+          <div className="space-y-0 relative">
+            {visualLayerOrder.map((layerId, index) => (
+              <React.Fragment key={layerId}>
+                <div
+                  onClick={() => setActiveLayer(layerId)}
+                  className={`flex items-center p-3 rounded-lg cursor-pointer transition-all duration-300 ${
+                    layers[layerId].active ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                  } ${
+                    isSwapping ? 'transform translate-y-0' : ''
+                  }`}
+                  style={{
+                    transform: isSwapping ? `translateY(${index === 0 ? 100 : -100}%)` : 'translateY(0)',
+                    transition: 'transform 0.3s ease-in-out, background-color 0.2s'
+                  }}
+                >
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLayerVisibility(layerId);
+                    }}
+                    className={`text-xl mr-3 cursor-pointer ${
+                      layers[layerId].active ? 'text-white' : 'text-gray-900'
+                    }`}
+                  >
+                    {layers[layerId].visible ? '●' : '○'}
+                  </span>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{layerId === 1 ? 'Red Layer' : 'Green Layer'}</div>
+                    <div className="text-xs opacity-70">
+                      Drawing {layerId} {layers[layerId].active && '• Active'}
+                    </div>
+                  </div>
+                </div>
+                
+              </React.Fragment>
+            ))}
+            
+            {/* Floating swap button between layers */}
             <button
               onClick={swapLayerOrder}
-              className="p-2 rounded-full hover:bg-gray-200 transition-all duration-200 hover:scale-110 group"
+              className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-all duration-200 hover:scale-110 shadow-sm group z-10"
               title="Swap layer order"
             >
-              <svg className="w-5 h-5 text-gray-600 group-hover:text-indigo-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-gray-600 group-hover:text-indigo-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
               </svg>
             </button>
-          </div>
-
-          <div
-            onClick={() => setActiveLayer(2)}
-            className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
-              layers[2].active ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-            }`}
-          >
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleLayerVisibility(2);
-              }}
-              className={`text-xl mr-3 cursor-pointer ${
-                layers[2].active ? 'text-white' : 'text-gray-900'
-              }`}
-            >
-              {layers[2].visible ? '●' : '○'}
-            </span>
-            <div className="flex-1">
-              <div className="font-medium text-sm">Layer 2</div>
-              <div className="text-xs opacity-70">
-                Drawing 2 {layers[2].active && '• Active'}
-              </div>
-            </div>
           </div>
         </div>
 
