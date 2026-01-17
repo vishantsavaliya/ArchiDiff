@@ -124,7 +124,7 @@ def upscale_image(input_path, output_path, scale=1.5):
     # Use simple bicubic upscaling (faster, good for technical drawings)
     # Real-ESRGAN is better for photos but slower
     h, w = img.shape[:2]
-    upscaled = cv2.resize(img, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
+    upscaled = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
     
     new_size = upscaled.shape[:2]
     print(f"Upscaled size: {new_size[1]}x{new_size[0]} pixels")

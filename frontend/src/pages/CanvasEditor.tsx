@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusMessage } from '../components/StatusMessage';
 import { imageEditorService, type Layer } from '../services/imageEditorService';
@@ -60,8 +60,10 @@ export const CanvasEditor: React.FC = () => {
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1.0 });
 
   const jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
-  const activeLayerId = layers[1].active ? 1 : 2;
-  const activeLayer = layers[activeLayerId];
+  
+  // Memoize derived state to prevent unnecessary recalculations
+  const activeLayerId = useMemo(() => layers[1].active ? 1 : 2, [layers]);
+  const activeLayer = useMemo(() => layers[activeLayerId], [layers, activeLayerId]);
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -121,19 +123,30 @@ export const CanvasEditor: React.FC = () => {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw in canvas pixel space
       
+      // Box coordinates are in image space, need to forward transform to canvas space
+      const transform = layers[activeLayerId].transform;
+      const scale = transform.scale;
+      const offsetX = transform.x;
+      const offsetY = transform.y;
+      
+      const canvasStartX = currentBoxStart.x * scale + offsetX;
+      const canvasStartY = currentBoxStart.y * scale + offsetY;
+      const canvasEndX = currentBoxEnd.x * scale + offsetX;
+      const canvasEndY = currentBoxEnd.y * scale + offsetY;
+      
       // Make it VERY visible for debugging
       ctx.strokeStyle = '#ffffff';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; // Semi-transparent white fill
       ctx.lineWidth = 5; // Thicker line
       ctx.setLineDash([10, 5]);
       
-      const width = currentBoxEnd.x - currentBoxStart.x;
-      const height = currentBoxEnd.y - currentBoxStart.y;
+      const width = canvasEndX - canvasStartX;
+      const height = canvasEndY - canvasStartY;
       
       // Draw filled rectangle first
-      ctx.fillRect(currentBoxStart.x, currentBoxStart.y, width, height);
+      ctx.fillRect(canvasStartX, canvasStartY, width, height);
       // Then stroke  
-      ctx.strokeRect(currentBoxStart.x, currentBoxStart.y, width, height);
+      ctx.strokeRect(canvasStartX, canvasStartY, width, height);
       
       ctx.restore();
     }
@@ -325,22 +338,22 @@ export const CanvasEditor: React.FC = () => {
     };
   }, [images, renderCanvas]);
 
-  const setActiveLayer = (layerId: number) => {
+  const setActiveLayer = useCallback((layerId: number) => {
     setLayers((prev) => ({
       ...prev,
       1: { ...prev[1], active: layerId === 1 },
       2: { ...prev[2], active: layerId === 2 },
     }));
-  };
+  }, []);
 
-  const toggleLayerVisibility = (layerId: number) => {
+  const toggleLayerVisibility = useCallback((layerId: number) => {
     setLayers((prev) => ({
       ...prev,
       [layerId]: { ...prev[layerId], visible: !prev[layerId].visible },
     }));
-  };
+  }, []);
 
-  const updateTransform = (key: keyof Layer['transform'], value: number) => {
+  const updateTransform = useCallback((key: keyof Layer['transform'], value: number) => {
     setLayers((prev) => ({
       ...prev,
       [activeLayerId]: {
@@ -348,9 +361,9 @@ export const CanvasEditor: React.FC = () => {
         transform: { ...prev[activeLayerId].transform, [key]: value },
       },
     }));
-  };
+  }, [activeLayerId]);
 
-  const resetTransform = () => {
+  const resetTransform = useCallback(() => {
     setLayers((prev) => ({
       ...prev,
       [activeLayerId]: {
@@ -359,9 +372,9 @@ export const CanvasEditor: React.FC = () => {
       },
     }));
     setMessage({ type: 'success', text: 'Transform reset' });
-  };
+  }, [activeLayerId]);
 
-  const downloadCanvas = () => {
+  const downloadCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -370,7 +383,7 @@ export const CanvasEditor: React.FC = () => {
     link.href = canvas.toDataURL();
     link.click();
     setMessage({ type: 'success', text: 'Downloaded!' });
-  };
+  }, []);
 
   // Mouse dragging handlers with throttled updates
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -393,14 +406,28 @@ export const CanvasEditor: React.FC = () => {
         setIsErasing(true);
         eraseAtPoint(e);
       } else if (editSubTool === 'box') {
-        // Start box selection
-        const pos = { x: canvasX, y: canvasY };
+        // Start box selection - store in image space (inverse transform)
+        const transform = layers[activeLayerId].transform;
+        const scale = transform.scale;
+        const offsetX = transform.x;
+        const offsetY = transform.y;
+        const imageX = (canvasX - offsetX) / scale;
+        const imageY = (canvasY - offsetY) / scale;
+        
+        const pos = { x: imageX, y: imageY };
         setBoxStart(pos);
         setBoxEnd(pos);
         boxPosRef.current = { start: pos, end: pos };
       } else if (editSubTool === 'line') {
-        // Find and toggle line near click
-        const lineIdx = findLineNearPoint(canvasX, canvasY);
+        // Find and toggle line near click - inverse transform coordinates first
+        const transform = layers[activeLayerId].transform;
+        const scale = transform.scale;
+        const offsetX = transform.x;
+        const offsetY = transform.y;
+        const imageX = (canvasX - offsetX) / scale;
+        const imageY = (canvasY - offsetY) / scale;
+        
+        const lineIdx = findLineNearPoint(imageX, imageY);
         if (lineIdx !== null) {
           setSelectedLines(prev => {
             const newSet = new Set(prev);
@@ -438,8 +465,15 @@ export const CanvasEditor: React.FC = () => {
         }
         return;
       } else if (editSubTool === 'box' && boxStart) {
-        // Update box end position immediately via ref for real-time feedback
-        const pos = { x: canvasX, y: canvasY };
+        // Update box end position - store in image space (inverse transform)
+        const transform = layers[activeLayerId].transform;
+        const scale = transform.scale;
+        const offsetX = transform.x;
+        const offsetY = transform.y;
+        const imageX = (canvasX - offsetX) / scale;
+        const imageY = (canvasY - offsetY) / scale;
+        
+        const pos = { x: imageX, y: imageY };
         boxPosRef.current.end = pos;
         setBoxEnd(pos);
         renderCanvas();
@@ -509,7 +543,7 @@ export const CanvasEditor: React.FC = () => {
     setCursorPos(null);
   };
 
-  const saveUndoState = () => {
+  const saveUndoState = useCallback(() => {
     const canvas = editableImages[activeLayerId];
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -522,9 +556,9 @@ export const CanvasEditor: React.FC = () => {
         setRedoHistory([]);
       }
     }
-  };
+  }, [activeLayerId, editableImages]);
 
-  const eraseBox = () => {
+  const eraseBox = useCallback(() => {
     if (!boxStart || !boxEnd) return;
 
     const canvas = editableImages[activeLayerId];
@@ -533,6 +567,7 @@ export const CanvasEditor: React.FC = () => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
+    // Box coordinates are already in image space, no transform needed
     const x = Math.min(boxStart.x, boxEnd.x);
     const y = Math.min(boxStart.y, boxEnd.y);
     const width = Math.abs(boxEnd.x - boxStart.x);
@@ -545,7 +580,7 @@ export const CanvasEditor: React.FC = () => {
 
     renderCanvas();
     setMessage({ type: 'success', text: 'Box erased' });
-  };
+  }, [boxStart, boxEnd, activeLayerId, editableImages, renderCanvas]);
 
   const findLineNearPoint = (x: number, y: number, threshold = 15): number | null => {
     let minDist = Infinity;
@@ -577,7 +612,7 @@ export const CanvasEditor: React.FC = () => {
     return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
   };
 
-  const eraseSelectedLines = () => {
+  const eraseSelectedLines = useCallback(() => {
     if (selectedLines.size === 0) {
       setMessage({ type: 'error', text: 'No lines selected' });
       return;
@@ -609,9 +644,9 @@ export const CanvasEditor: React.FC = () => {
     setSelectedLines(new Set());
     renderCanvas();
     setMessage({ type: 'success', text: `${selectedLines.size} line(s) erased` });
-  };
+  }, [selectedLines, activeLayerId, editableImages, detectedLines, saveUndoState, renderCanvas]);
 
-  const detectLinesOnCanvas = () => {
+  const detectLinesOnCanvas = useCallback(() => {
     const canvas = editableImages[activeLayerId];
     if (!canvas) return;
 
@@ -655,9 +690,9 @@ export const CanvasEditor: React.FC = () => {
 
     setDetectedLines(lines);
     setMessage({ type: 'success', text: `Detected ${lines.length} lines` });
-  };
+  }, [activeLayerId, editableImages]);
 
-  const swapLayerOrder = () => {
+  const swapLayerOrder = useCallback(() => {
     setIsSwapping(true);
     // Update canvas render order immediately
     setLayerOrder((prev) => [prev[1], prev[0]]);
@@ -671,9 +706,9 @@ export const CanvasEditor: React.FC = () => {
         text: `Layer order swapped` 
       });
     }, 300);
-  };
+  }, []);
 
-  const eraseAtPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const eraseAtPoint = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     const editCanvas = editableImages[activeLayerId];
     if (!canvas || !editCanvas) return;
@@ -681,8 +716,18 @@ export const CanvasEditor: React.FC = () => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+
+    // Get layer transform and inverse transform the coordinates
+    const transform = layers[activeLayerId].transform;
+    const scale = transform.scale;
+    const offsetX = transform.x;
+    const offsetY = transform.y;
+    
+    // Inverse transform back to original image space
+    const x = (canvasX - offsetX) / scale;
+    const y = (canvasY - offsetY) / scale;
 
     // Use willReadFrequently only for erase operations
     const ctx = editCanvas.getContext('2d', { willReadFrequently: true });
@@ -691,15 +736,15 @@ export const CanvasEditor: React.FC = () => {
     // Erase in a circle on the editable image
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+    ctx.arc(x, y, brushSize / scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
 
     // Trigger re-render
     renderCanvas();
-  };
+  }, [activeLayerId, editableImages, brushSize, layers, renderCanvas]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (undoHistory.length === 0) return;
 
     const lastState = undoHistory[undoHistory.length - 1];
@@ -724,9 +769,9 @@ export const CanvasEditor: React.FC = () => {
 
     renderCanvas();
     setMessage({ type: 'success', text: 'Undo' });
-  };
+  }, [undoHistory, editableImages, renderCanvas]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (redoHistory.length === 0) return;
 
     const nextState = redoHistory[redoHistory.length - 1];
@@ -751,7 +796,7 @@ export const CanvasEditor: React.FC = () => {
 
     renderCanvas();
     setMessage({ type: 'success', text: 'Redo' });
-  };
+  }, [redoHistory, editableImages, renderCanvas]);
 
   const convertLayer2ToGreen = async () => {
     try {

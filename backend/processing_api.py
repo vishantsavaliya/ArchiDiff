@@ -15,6 +15,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 CORS(app)
@@ -190,39 +191,26 @@ def process_files(job_id):
         
         job['progress'] = 15
         
-        # Step 2: Remove text BEFORE upscaling (5-10x faster on smaller images!)
-        job['current_step'] = 'Removing text annotations...'
+        # Step 2: Skip text removal for now (disabled)
+        job['current_step'] = 'Preparing images...'
         job['progress'] = 20
         
         cleaned1_path = job_output / 'file1_cleaned.png'
         cleaned2_path = job_output / 'file2_cleaned.png'
         
-        # Process both in parallel using threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
-        # Only remove text if not already done
-        text_tasks = []
+        # Just copy original files (text removal disabled)
         if not cleaned1_path.exists():
-            text_tasks.append(('file1', file1_path, cleaned1_path))
-        else:
-            print(f"Skipping text removal for file1 (already exists)")
+            shutil.copy2(file1_path, cleaned1_path)
+            print(f"Copied file1 (text removal disabled)")
         
         if not cleaned2_path.exists():
-            text_tasks.append(('file2', file2_path, cleaned2_path))
-        else:
-            print(f"Skipping text removal for file2 (already exists)")
-        
-        if text_tasks:
-            # Use 1 worker to prevent multiple EasyOCR instances (saves memory)
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                futures = [executor.submit(remove_text, task[1], task[2]) for task in text_tasks]
-                for future in futures:
-                    future.result()
+            shutil.copy2(file2_path, cleaned2_path)
+            print(f"Copied file2 (text removal disabled)")
         
         job['progress'] = 60
         
         # Step 3: Upscale cleaned images (skip if already done)
-        job['current_step'] = 'Upscaling images 2x...'
+        job['current_step'] = 'Upscaling images 1.5x...'
         job['progress'] = 65
         
         # Only upscale if not already done

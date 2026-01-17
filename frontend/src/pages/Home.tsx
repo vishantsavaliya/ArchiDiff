@@ -94,7 +94,7 @@ export const Home: React.FC = () => {
             localStorage.setItem('dashboard_job_id', jobId);
             localStorage.setItem('dashboard_file1', statusData.file1);
             localStorage.setItem('dashboard_file2', statusData.file2);
-            navigate('/dashboard');
+            navigate('/canvas-editor');
           }, 2000);
         } else if (statusData.status === 'failed') {
           clearInterval(pollInterval);
