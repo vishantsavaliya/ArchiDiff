@@ -110,7 +110,8 @@ export const Home: React.FC = () => {
   const getStepIcon = (step: string) => {
     if (step.includes('PDF')) return '📄';
     if (step.includes('Upscaling')) return '🔍';
-    if (step.includes('text') || step.includes('Text')) return '✏️';
+    if (step.includes('Removing text') || step.includes('text')) return '🗑️';
+    if (step.includes('Preparing')) return '⚙️';
     if (step.includes('Complete')) return '✅';
     return '⚙️';
   };

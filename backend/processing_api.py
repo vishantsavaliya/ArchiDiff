@@ -104,24 +104,19 @@ def upload_files():
     })
 
 def cleanup_old_uploads():
-    """Remove old upload and processed folders to save storage"""
+    """Remove ALL upload and processed folders on startup to avoid confusion"""
     try:
-        import time
-        current_time = time.time()
-        
-        # Remove ALL upload folders (they should be deleted after processing anyway)
+        # Remove ALL upload folders (they're temporary)
         for folder in UPLOAD_FOLDER.iterdir():
             if folder.is_dir():
                 print(f"Cleaning up upload folder: {folder.name}")
                 shutil.rmtree(folder, ignore_errors=True)
         
-        # Remove processed folders older than 30 minutes (keeps files during editing)
+        # Remove ALL processed folders on startup (fresh start each time)
         for folder in OUTPUT_FOLDER.iterdir():
             if folder.is_dir():
-                folder_age = current_time - folder.stat().st_mtime
-                if folder_age > 1800:  # 30 minutes
-                    print(f"Cleaning up old processed folder: {folder.name}")
-                    shutil.rmtree(folder, ignore_errors=True)
+                print(f"Cleaning up processed folder: {folder.name}")
+                shutil.rmtree(folder, ignore_errors=True)
         
         # Limit processing_jobs dictionary to prevent memory buildup
         if len(processing_jobs) > 50:
@@ -198,14 +193,35 @@ def process_files(job_id):
         cleaned1_path = job_output / 'file1_cleaned.png'
         cleaned2_path = job_output / 'file2_cleaned.png'
         
-        # Just copy original files (text removal disabled)
+        # Step 2: Remove text from images (parallel processing)
+        job['current_step'] = 'Removing text from images...'
+        job['progress'] = 30
+        
+        text_removal_tasks = []
         if not cleaned1_path.exists():
-            shutil.copy2(file1_path, cleaned1_path)
-            print(f"Copied file1 (text removal disabled)")
+            text_removal_tasks.append(('file1', file1_path, cleaned1_path))
+        else:
+            print(f"Skipping text removal for file1 (already exists)")
         
         if not cleaned2_path.exists():
-            shutil.copy2(file2_path, cleaned2_path)
-            print(f"Copied file2 (text removal disabled)")
+            text_removal_tasks.append(('file2', file2_path, cleaned2_path))
+        else:
+            print(f"Skipping text removal for file2 (already exists)")
+        
+        if text_removal_tasks:
+            # Process in parallel for faster results
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [executor.submit(remove_text, task[1], task[2]) for task in text_removal_tasks]
+                for i, future in enumerate(futures):
+                    try:
+                        future.result()
+                        job['progress'] = 30 + (i + 1) * 15  # 30-60%
+                        print(f"Text removal completed for {text_removal_tasks[i][0]}")
+                    except Exception as e:
+                        print(f"Text removal failed for {text_removal_tasks[i][0]}: {e}")
+                        # Fallback: copy original file if text removal fails
+                        shutil.copy2(text_removal_tasks[i][1], text_removal_tasks[i][2])
+                        print(f"Using original file for {text_removal_tasks[i][0]}")
         
         job['progress'] = 60
         

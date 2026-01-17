@@ -64,6 +64,16 @@ export const CanvasEditor: React.FC = () => {
   // Memoize derived state to prevent unnecessary recalculations
   const activeLayerId = useMemo(() => layers[1].active ? 1 : 2, [layers]);
   const activeLayer = useMemo(() => layers[activeLayerId], [layers, activeLayerId]);
+  
+  // Calculate scale to fit images within canvas (memoized)
+  const scaleToFit = useMemo(() => {
+    if (!images[1] || !images[2]) return 1;
+    const CANVAS_WIDTH = 1600;
+    const CANVAS_HEIGHT = 1200;
+    const maxImageWidth = Math.max(images[1].width, images[2].width);
+    const maxImageHeight = Math.max(images[1].height, images[2].height);
+    return Math.min(CANVAS_WIDTH / maxImageWidth, CANVAS_HEIGHT / maxImageHeight);
+  }, [images]);
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -130,16 +140,26 @@ export const CanvasEditor: React.FC = () => {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw in canvas pixel space
       
-      // Box coordinates are in image space, need to forward transform to canvas space
+      // Box coordinates are in image space (top-left origin), need to forward transform to canvas space
+      const img = images[activeLayerId];
+      if (!img) return;
       const transform = layers[activeLayerId].transform;
-      const scale = transform.scale;
-      const offsetX = transform.x;
-      const offsetY = transform.y;
+      const totalScale = transform.scale * scaleToFit;
+      const centerX = (img.width * scaleToFit) / 2;
+      const centerY = (img.height * scaleToFit) / 2;
+      const offsetX = centerX + transform.x;
+      const offsetY = centerY + transform.y;
       
-      const canvasStartX = currentBoxStart.x * scale + offsetX;
-      const canvasStartY = currentBoxStart.y * scale + offsetY;
-      const canvasEndX = currentBoxEnd.x * scale + offsetX;
-      const canvasEndY = currentBoxEnd.y * scale + offsetY;
+      // Convert from top-left origin to center-origin, then forward transform
+      const relStartX = currentBoxStart.x - (img.width / 2);
+      const relStartY = currentBoxStart.y - (img.height / 2);
+      const relEndX = currentBoxEnd.x - (img.width / 2);
+      const relEndY = currentBoxEnd.y - (img.height / 2);
+      
+      const canvasStartX = relStartX * totalScale + offsetX;
+      const canvasStartY = relStartY * totalScale + offsetY;
+      const canvasEndX = relEndX * totalScale + offsetX;
+      const canvasEndY = relEndY * totalScale + offsetY;
       
       // Make it VERY visible for debugging
       ctx.strokeStyle = '#ffffff';
@@ -416,12 +436,22 @@ export const CanvasEditor: React.FC = () => {
         eraseAtPoint(e);
       } else if (editSubTool === 'box') {
         // Start box selection - store in image space (inverse transform)
+        const img = images[activeLayerId];
+        if (!img) return;
         const transform = layers[activeLayerId].transform;
-        const scale = transform.scale;
-        const offsetX = transform.x;
-        const offsetY = transform.y;
-        const imageX = (canvasX - offsetX) / scale;
-        const imageY = (canvasY - offsetY) / scale;
+        const totalScale = transform.scale * scaleToFit;
+        const centerX = (img.width * scaleToFit) / 2;
+        const centerY = (img.height * scaleToFit) / 2;
+        const offsetX = centerX + transform.x;
+        const offsetY = centerY + transform.y;
+        
+        // Inverse transform to get position relative to image center
+        const relX = (canvasX - offsetX) / totalScale;
+        const relY = (canvasY - offsetY) / totalScale;
+        
+        // Convert from center-origin to top-left origin for editable canvas
+        const imageX = relX + (img.width / 2);
+        const imageY = relY + (img.height / 2);
         
         const pos = { x: imageX, y: imageY };
         setBoxStart(pos);
@@ -429,12 +459,22 @@ export const CanvasEditor: React.FC = () => {
         boxPosRef.current = { start: pos, end: pos };
       } else if (editSubTool === 'line') {
         // Find and toggle line near click - inverse transform coordinates first
+        const img = images[activeLayerId];
+        if (!img) return;
         const transform = layers[activeLayerId].transform;
-        const scale = transform.scale;
-        const offsetX = transform.x;
-        const offsetY = transform.y;
-        const imageX = (canvasX - offsetX) / scale;
-        const imageY = (canvasY - offsetY) / scale;
+        const totalScale = transform.scale * scaleToFit;
+        const centerX = (img.width * scaleToFit) / 2;
+        const centerY = (img.height * scaleToFit) / 2;
+        const offsetX = centerX + transform.x;
+        const offsetY = centerY + transform.y;
+        
+        // Inverse transform to get position relative to image center
+        const relX = (canvasX - offsetX) / totalScale;
+        const relY = (canvasY - offsetY) / totalScale;
+        
+        // Convert from center-origin to top-left origin
+        const imageX = relX + (img.width / 2);
+        const imageY = relY + (img.height / 2);
         
         const lineIdx = findLineNearPoint(imageX, imageY);
         if (lineIdx !== null) {
@@ -475,12 +515,22 @@ export const CanvasEditor: React.FC = () => {
         return;
       } else if (editSubTool === 'box' && boxStart) {
         // Update box end position - store in image space (inverse transform)
+        const img = images[activeLayerId];
+        if (!img) return;
         const transform = layers[activeLayerId].transform;
-        const scale = transform.scale;
-        const offsetX = transform.x;
-        const offsetY = transform.y;
-        const imageX = (canvasX - offsetX) / scale;
-        const imageY = (canvasY - offsetY) / scale;
+        const totalScale = transform.scale * scaleToFit;
+        const centerX = (img.width * scaleToFit) / 2;
+        const centerY = (img.height * scaleToFit) / 2;
+        const offsetX = centerX + transform.x;
+        const offsetY = centerY + transform.y;
+        
+        // Inverse transform to get position relative to image center
+        const relX = (canvasX - offsetX) / totalScale;
+        const relY = (canvasY - offsetY) / totalScale;
+        
+        // Convert from center-origin to top-left origin for editable canvas
+        const imageX = relX + (img.width / 2);
+        const imageY = relY + (img.height / 2);
         
         const pos = { x: imageX, y: imageY };
         boxPosRef.current.end = pos;
@@ -729,14 +779,22 @@ export const CanvasEditor: React.FC = () => {
     const canvasY = (e.clientY - rect.top) * scaleY;
 
     // Get layer transform and inverse transform the coordinates
+    const img = images[activeLayerId];
+    if (!img) return;
     const transform = layers[activeLayerId].transform;
-    const scale = transform.scale;
-    const offsetX = transform.x;
-    const offsetY = transform.y;
+    const totalScale = transform.scale * scaleToFit;
+    const centerX = (img.width * scaleToFit) / 2;
+    const centerY = (img.height * scaleToFit) / 2;
+    const offsetX = centerX + transform.x;
+    const offsetY = centerY + transform.y;
     
-    // Inverse transform back to original image space
-    const x = (canvasX - offsetX) / scale;
-    const y = (canvasY - offsetY) / scale;
+    // Inverse transform to get position relative to image center
+    const relX = (canvasX - offsetX) / totalScale;
+    const relY = (canvasY - offsetY) / totalScale;
+    
+    // Convert from center-origin to top-left origin for editable canvas
+    const x = relX + (img.width / 2);
+    const y = relY + (img.height / 2);
 
     // Use willReadFrequently only for erase operations
     const ctx = editCanvas.getContext('2d', { willReadFrequently: true });
@@ -745,13 +803,13 @@ export const CanvasEditor: React.FC = () => {
     // Erase in a circle on the editable image
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(x, y, brushSize / scale, 0, Math.PI * 2);
+    ctx.arc(x, y, brushSize / totalScale, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
 
     // Trigger re-render
     renderCanvas();
-  }, [activeLayerId, editableImages, brushSize, layers, renderCanvas]);
+  }, [activeLayerId, editableImages, brushSize, layers, scaleToFit, images, renderCanvas]);
 
   const undo = useCallback(() => {
     if (undoHistory.length === 0) return;
