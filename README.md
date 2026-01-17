@@ -1,155 +1,145 @@
-# ArchiBoost Compare
+# ArchiDiff
 
-A professional web tool for visually comparing architectural details by overlaying drawings on a single canvas.
+ArchiDiff is a web-based architectural drawing comparison and editing tool designed to compare two architectural plans side-by-side with advanced overlay and editing capabilities.
 
-## Problem Statement
+## 🎯 Features
 
-Architects and designers often create multiple versions of the same detail across different projects. When searching through a detail library, it's difficult to compare similar details and identify the best version to use.
+- **Upload & Process**: Upload two architectural drawings (PDF, PNG, JPG)
+- **Automatic Upscaling**: 1.5X upscaling using bicubic interpolation for better quality
+- **Canvas Editor**: Interactive canvas with layer-based editing
+- **Box Erase Tool**: Precise erasing with transform-aware coordinate system
+- **Overlay Comparison**: Compare two drawings with adjustable opacity
+- **Layer Management**: Move, scale, rotate, and adjust opacity of each layer independently
+- **Undo/Redo**: 10-step history for all edits
+- **Download Results**: Export edited images as PNG
 
-## Solution
+## 🚀 Quick Start
 
-ArchiBoost Compare allows users to:
-- Select two architectural details from a library
-- Overlay them on a single canvas with distinct colors
-- Adjust opacity, alignment, and zoom to spot differences
-- Export comparisons as high-quality images
+### Prerequisites
 
-## Tech Stack
+- Python 3.8+
+- Node.js 18+
+- npm or yarn
 
-### Frontend
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type-safe development
-- **Tailwind CSS** - Utility-first styling
-- **shadcn/ui** - Beautiful, accessible UI components
-- **Fabric.js** - Interactive canvas for overlays
+### Installation
 
-### Backend
-- **FastAPI** - Modern Python web framework
-- **Uvicorn** - ASGI server
-- **Python libraries** - Image processing, CAD file parsing
-
-## Project Structure
-
-```
-archiboost-compare/
-├── frontend/           # Next.js application
-│   ├── app/           # App router pages
-│   ├── components/    # React components
-│   └── lib/           # Utilities
-├── backend/           # FastAPI server
-│   ├── main.py       # API endpoints
-│   ├── details/      # Detail files storage
-│   └── processors/   # File processing modules
-└── README.md
+1. **Clone the repository**
+```bash
+git clone <repository-url>
+cd ArchiDiff
 ```
 
-## Getting Started
-
-### Backend Setup
-
-1. Navigate to backend directory:
+2. **Backend Setup**
 ```bash
 cd backend
-```
-
-2. Create virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. Add your detail files to `backend/details/` directory
-
-5. Run the server:
-```bash
-uvicorn main:app --reload
-```
-
-API will be available at `http://localhost:8000`
-
-### Frontend Setup
-
-1. Navigate to frontend directory:
+3. **Frontend Setup**
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
 ```
 
-3. Run development server:
-```bash
-npm run dev
-```
+### Running the Application
 
-App will be available at `http://localhost:3000`
-
-## Features
-
-- 🎨 **Visual Overlay** - Compare details with color-coded overlays
-- 🎚️ **Opacity Control** - Adjust transparency for each layer
-- 🔍 **Pan & Zoom** - Navigate large drawings easily
-- 📸 **Export** - Save comparisons as PNG images
-- 🎯 **Alignment Tools** - Position details precisely
-- 📱 **Responsive** - Works on desktop and tablet
-- 🌙 **Dark Mode** - Professional dark interface
-
-## Usage
-
-1. Open the app and click "Start Comparing"
-2. Select two details from the library
-3. Use opacity sliders to adjust visibility
-4. Pan and zoom to inspect differences
-5. Export the comparison for documentation
-
-## Development
-
-### Adding New Details
-
-1. Place files in `backend/details/`
-2. Update `DETAILS_METADATA` in `backend/main.py`
-3. Supported formats: PDF, PNG, JPG, DXF, DWG
-
-### Customization
-
-- Colors: Edit Tailwind theme in `tailwind.config.ts`
-- API endpoints: Modify `backend/main.py`
-- UI components: Located in `frontend/components/`
-
-## Deployment
-
-### Frontend (Vercel)
-```bash
-cd frontend
-vercel deploy
-```
-
-### Backend (Railway/Render)
+1. **Start Backend Server** (Terminal 1)
 ```bash
 cd backend
-# Follow platform-specific deployment steps
+python3 processing_api.py
+```
+Backend will run on `http://localhost:5004`
+
+2. **Start Frontend Server** (Terminal 2)
+```bash
+cd frontend
+npm run dev
+```
+Frontend will run on `http://localhost:5177`
+
+3. **Access the Application**
+Open `http://localhost:5177` in your browser
+
+## 📖 How to Use
+
+1. **Upload Files**: Click "Choose Files" and select two architectural drawings
+2. **Processing**: Files are automatically upscaled 1.5X for better quality
+3. **Canvas Editor**: Opens automatically after processing
+4. **Edit Tools**:
+   - **Overlay Mode**: Drag to move the active layer, adjust opacity with slider
+   - **Edit Mode**: Draw box selections to erase areas
+   - **Layer Controls**: Switch between layers, toggle visibility, swap order
+5. **Download**: Click "Download Canvas" to save your edited image
+
+## 🏗️ Architecture
+
+```
+ArchiDiff/
+├── backend/          # Flask API server
+│   ├── processing_api.py      # Main API server
+│   ├── upscale_realesrgan.py  # Image upscaling
+│   ├── remove_text_ocr.py     # Text removal (optional)
+│   └── requirements.txt       # Python dependencies
+├── frontend/         # React TypeScript app
+│   ├── src/
+│   │   ├── pages/            # Main pages
+│   │   ├── components/       # UI components
+│   │   ├── services/         # API integration
+│   │   └── utils/            # Helper utilities
+│   └── package.json          # Node dependencies
+└── README.md         # This file
 ```
 
-## Future Enhancements
+## 🔧 Configuration
 
-- [ ] AI-powered similarity detection
-- [ ] Automatic alignment using computer vision
-- [ ] Batch comparison (3+ details)
-- [ ] Annotation tools
-- [ ] Collaborative features
-- [ ] Version history tracking
+### Backend Port
+Edit `processing_api.py`:
+```python
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5004, debug=True)
+```
 
-## Author
+### Frontend API URL
+Edit `frontend/src/services/api.ts`:
+```typescript
+const API_BASE_URL = 'http://localhost:5004';
+```
 
-Built by [Your Name] as a portfolio project demonstrating full-stack development with modern web technologies.
+### Canvas Size
+Edit `frontend/src/pages/CanvasEditor.tsx`:
+```typescript
+const CANVAS_WIDTH = 1600;
+const CANVAS_HEIGHT = 1200;
+```
 
-## License
+## 📚 Documentation
 
-MIT License - Feel free to use this project for learning and portfolio purposes.
+- **[FRONTEND.md](./FRONTEND.md)**: Detailed frontend architecture and component documentation
+- **[BACKEND.md](./BACKEND.md)**: Detailed backend API and processing pipeline documentation
+
+## 🛠️ Technologies
+
+**Backend:**
+- Flask - Web framework
+- OpenCV - Image processing
+- EasyOCR - Text detection (optional)
+- Real-ESRGAN - Image upscaling
+
+**Frontend:**
+- React 18 - UI framework
+- TypeScript - Type safety
+- Vite - Build tool
+- Canvas API - Image rendering and editing
+- Tailwind CSS - Styling
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📧 Support
+
+For issues and questions, please open an issue on GitHub.
