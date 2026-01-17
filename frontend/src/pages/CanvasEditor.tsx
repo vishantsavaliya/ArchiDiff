@@ -35,6 +35,8 @@ export const CanvasEditor: React.FC = () => {
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [layerOrder, setLayerOrder] = useState<[number, number]>([1, 2]); // [bottom, top]
   const renderRequestRef = useRef<number | null>(null);
+  const pendingTransformRef = useRef<{ dx: number; dy: number } | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   const jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
   const activeLayerId = layers[1].active ? 1 : 2;
@@ -42,16 +44,9 @@ export const CanvasEditor: React.FC = () => {
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !images[1] || !images[2]) {
-      console.log('Canvas or images not ready:', {
-        canvas: !!canvas,
-        img1: !!images[1],
-        img2: !!images[2]
-      });
-      return;
-    }
+    if (!canvas || !images[1] || !images[2]) return;
 
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!ctx) return;
 
     // Set canvas size only if changed
@@ -146,24 +141,38 @@ export const CanvasEditor: React.FC = () => {
       const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
       const data = imageData.data;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
+      // Quick sample to detect if image is inverted (black bg vs white bg)
+      let sampleWhite = 0;
+      let sampleBlack = 0;
+      const sampleSize = Math.min(10000, data.length / 4);
+      const step = Math.floor(data.length / (sampleSize * 4));
+      
+      for (let i = 0; i < data.length; i += step * 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (r > 240 && g > 240 && b > 240) sampleWhite++;
+        else if (r < 20 && g < 20 && b < 20) sampleBlack++;
+      }
+      const isInverted = sampleBlack > sampleWhite;
 
-        if (r > 240 && g > 240 && b > 240) {
-          data[i] = 255;
-          data[i + 1] = 255;
-          data[i + 2] = 255;
-        } else {
-          if (isLayer1) {
-            data[i] = 255;
-            data[i + 1] = 0;
-            data[i + 2] = 0;
+      // Single pass: process all pixels
+      if (isLayer1) {
+        // Layer 1: Red lines
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          if (isInverted ? (r < 30 && g < 30 && b < 30) : (r > 200 && g > 200 && b > 200)) {
+            data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0; // Transparent
           } else {
-            data[i] = 0;
-            data[i + 1] = 255;
-            data[i + 2] = 0;
+            data[i] = 255; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = 255; // Red
+          }
+        }
+      } else {
+        // Layer 2: Green lines
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          if (isInverted ? (r < 30 && g < 30 && b < 30) : (r > 200 && g > 200 && b > 200)) {
+            data[i] = data[i + 1] = data[i + 2] = data[i + 3] = 0; // Transparent
+          } else {
+            data[i] = 0; data[i + 1] = 255; data[i + 2] = 0; data[i + 3] = 255; // Green
           }
         }
       }
@@ -249,7 +258,7 @@ export const CanvasEditor: React.FC = () => {
     setMessage({ type: 'success', text: 'Downloaded!' });
   };
 
-  // Mouse dragging handlers
+  // Mouse dragging handlers with throttled updates
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (currentTool !== 'overlay') return;
     setIsDragging(true);
@@ -262,25 +271,46 @@ export const CanvasEditor: React.FC = () => {
     const dx = e.clientX - dragStart.x;
     const dy = e.clientY - dragStart.y;
 
-    // Batch both transform updates together
-    setLayers((prev) => ({
-      ...prev,
-      [activeLayerId]: {
-        ...prev[activeLayerId],
-        transform: { 
-          ...prev[activeLayerId].transform, 
-          x: prev[activeLayerId].transform.x + dx,
-          y: prev[activeLayerId].transform.y + dy
-        },
-      },
-    }));
+    // Apply 4x multiplier for more responsive movement
+    const MOVEMENT_MULTIPLIER = 4;
 
+    // Store pending transform instead of updating state immediately
+    pendingTransformRef.current = { dx: dx * MOVEMENT_MULTIPLIER, dy: dy * MOVEMENT_MULTIPLIER };
     setDragStart({ x: e.clientX, y: e.clientY });
+
+    // Apply transform on next animation frame (throttled)
+    if (!animationFrameRef.current) {
+      animationFrameRef.current = requestAnimationFrame(() => {
+        if (pendingTransformRef.current) {
+          const { dx: deltaX, dy: deltaY } = pendingTransformRef.current;
+          
+          setLayers((prev) => ({
+            ...prev,
+            [activeLayerId]: {
+              ...prev[activeLayerId],
+              transform: { 
+                ...prev[activeLayerId].transform, 
+                x: prev[activeLayerId].transform.x + deltaX,
+                y: prev[activeLayerId].transform.y + deltaY
+              },
+            },
+          }));
+
+          pendingTransformRef.current = null;
+        }
+        animationFrameRef.current = null;
+      });
+    }
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
     setDragStart(null);
+    pendingTransformRef.current = null;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
   };
 
   const swapLayerOrder = () => {
@@ -327,24 +357,6 @@ export const CanvasEditor: React.FC = () => {
         >
           <span className="text-2xl">▦</span>
           <span className="text-xs">Overlay</span>
-        </button>
-        <button
-          onClick={() => setCurrentTool('resize')}
-          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'resize' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100 text-gray-900'
-          }`}
-        >
-          <span className="text-2xl">⇲</span>
-          <span className="text-xs">Resize</span>
-        </button>
-        <button
-          onClick={() => setCurrentTool('crop')}
-          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'crop' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100 text-gray-900'
-          }`}
-        >
-          <span className="text-2xl">⊡</span>
-          <span className="text-xs">Crop</span>
         </button>
         <div className="flex-1" />
         <button
@@ -398,7 +410,7 @@ export const CanvasEditor: React.FC = () => {
 
           <div
             onClick={() => setActiveLayer(1)}
-            className={`flex items-center p-3 rounded-lg mb-2 cursor-pointer transition ${
+            className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
               layers[1].active ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
             }`}
           >
@@ -407,7 +419,9 @@ export const CanvasEditor: React.FC = () => {
                 e.stopPropagation();
                 toggleLayerVisibility(1);
               }}
-              className={`text-xl mr-3 cursor-pointer ${layers[1].active ? 'text-white' : 'text-gray-900'}`}
+              className={`text-xl mr-3 cursor-pointer ${
+                layers[1].active ? 'text-white' : 'text-gray-900'
+              }`}
             >
               {layers[1].visible ? '●' : '○'}
             </span>
@@ -417,6 +431,19 @@ export const CanvasEditor: React.FC = () => {
                 Drawing 1 {layers[1].active && '• Active'}
               </div>
             </div>
+          </div>
+
+          {/* Swap Button */}
+          <div className="flex justify-center my-2">
+            <button
+              onClick={swapLayerOrder}
+              className="p-2 rounded-full hover:bg-gray-200 transition-all duration-200 hover:scale-110 group"
+              title="Swap layer order"
+            >
+              <svg className="w-5 h-5 text-gray-600 group-hover:text-indigo-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </button>
           </div>
 
           <div
@@ -430,7 +457,9 @@ export const CanvasEditor: React.FC = () => {
                 e.stopPropagation();
                 toggleLayerVisibility(2);
               }}
-              className={`text-xl mr-3 cursor-pointer ${layers[2].active ? 'text-white' : 'text-gray-900'}`}
+              className={`text-xl mr-3 cursor-pointer ${
+                layers[2].active ? 'text-white' : 'text-gray-900'
+              }`}
             >
               {layers[2].visible ? '●' : '○'}
             </span>
@@ -529,21 +558,6 @@ export const CanvasEditor: React.FC = () => {
                 className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 text-sm"
               >
                 Reset Transform
-              </button>
-
-              <button
-                onClick={swapLayerOrder}
-                className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 text-sm"
-              >
-                Swap Layer Order (Layer {layerOrder[1]} on top)
-              </button>
-
-              <button
-                onClick={convertLayer2ToGreen}
-                className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 text-sm"
-                disabled={loading}
-              >
-                Convert Layer 2 to Green
               </button>
 
               <button
