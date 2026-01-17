@@ -25,7 +25,9 @@ export const CanvasEditor: React.FC = () => {
   
   const [images, setImages] = useState<Record<number, HTMLImageElement>>({});
   const [processedImages, setProcessedImages] = useState<Record<number, HTMLCanvasElement>>({});
-  const [currentTool, setCurrentTool] = useState<'overlay' | 'resize' | 'crop'>('overlay');
+  const [currentTool, setCurrentTool] = useState<'overlay' | 'erase' | 'brush' | 'select'>('overlay');
+  const [brushSize, setBrushSize] = useState(5);
+  const [brushColor, setBrushColor] = useState<'red' | 'green'>('red');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>({
     type: 'info',
@@ -124,6 +126,14 @@ export const CanvasEditor: React.FC = () => {
       
       setMessage({ type: 'success', text: TEST_MODE ? 'Test images loaded' : 'Images loaded' });
       setLoading(false);
+      
+      // Force initial render
+      setTimeout(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          renderCanvas();
+        }
+      }, 100);
     } catch (error) {
       console.error('Error loading images:', error);
       setMessage({ type: 'error', text: `Failed to load images: ${error}` });
@@ -358,20 +368,57 @@ export const CanvasEditor: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Left Toolbar */}
-      <div className="w-20 bg-white border-r border-gray-300 flex flex-col items-center py-5 space-y-2">
+      <div className="w-20 bg-gray-900 border-r border-gray-700 flex flex-col items-center py-5 space-y-2">
         <button
           onClick={() => setCurrentTool('overlay')}
           className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
-            currentTool === 'overlay' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100 text-gray-900'
+            currentTool === 'overlay' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
           }`}
         >
           <span className="text-2xl">▦</span>
           <span className="text-xs">Overlay</span>
         </button>
+        
+        <button
+          onClick={() => setCurrentTool('brush')}
+          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
+            currentTool === 'brush' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
+          }`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+          <span className="text-xs">Brush</span>
+        </button>
+        
+        <button
+          onClick={() => setCurrentTool('erase')}
+          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
+            currentTool === 'erase' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
+          }`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span className="text-xs">Erase</span>
+        </button>
+        
+        <button
+          onClick={() => setCurrentTool('select')}
+          className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg transition ${
+            currentTool === 'select' ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-300'
+          }`}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+          </svg>
+          <span className="text-xs">Select</span>
+        </button>
+        
         <div className="flex-1" />
         <button
           onClick={() => navigate('/')}
-          className="w-14 h-14 flex flex-col items-center justify-center rounded-lg hover:bg-gray-100 text-gray-900"
+          className="w-14 h-14 flex flex-col items-center justify-center rounded-lg hover:bg-gray-800 text-gray-300"
         >
           <span className="text-2xl">⌂</span>
           <span className="text-xs">Home</span>
@@ -391,7 +438,12 @@ export const CanvasEditor: React.FC = () => {
           {loading && <div className="text-white text-lg">Loading...</div>}
           <canvas
             ref={canvasRef}
-            className={`bg-white shadow-2xl ${currentTool === 'overlay' ? 'cursor-move' : ''}`}
+            className={`bg-white shadow-2xl ${
+              currentTool === 'overlay' ? 'cursor-move' : 
+              currentTool === 'brush' ? 'cursor-crosshair' : 
+              currentTool === 'erase' ? 'cursor-pointer' : 
+              'cursor-default'
+            }`}
             style={{ maxWidth: '100%', maxHeight: '100%' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -402,7 +454,7 @@ export const CanvasEditor: React.FC = () => {
       </div>
 
       {/* Right Sidebar */}
-      <div className="w-80 bg-white border-l border-gray-300 overflow-y-auto">
+      <div className="w-80 bg-gray-900 border-l border-gray-700 overflow-y-auto">
         {/* Message */}
         {message && (
           <div className="p-4">
@@ -415,16 +467,16 @@ export const CanvasEditor: React.FC = () => {
         )}
 
         {/* Layers Panel */}
-        <div className="p-5 border-b border-gray-200">
-          <h3 className="text-sm font-semibold mb-4 text-gray-700">Layers</h3>
+        <div className="p-5 border-b border-gray-700">
+          <h3 className="text-sm font-semibold mb-4 text-gray-300">Layers</h3>
 
-          <div className="space-y-0 relative">
+          <div className="space-y-2 relative pr-10">
             {visualLayerOrder.map((layerId, index) => (
               <React.Fragment key={layerId}>
                 <div
                   onClick={() => setActiveLayer(layerId)}
-                  className={`flex items-center p-3 rounded-lg cursor-pointer transition-all duration-300 ${
-                    layers[layerId].active ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                  className={`flex items-center p-2 rounded-lg cursor-pointer transition-all duration-300 ${
+                    layers[layerId].active ? 'bg-indigo-600 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
                   } ${
                     isSwapping ? 'transform translate-y-0' : ''
                   }`}
@@ -433,20 +485,27 @@ export const CanvasEditor: React.FC = () => {
                     transition: 'transform 0.3s ease-in-out, background-color 0.2s'
                   }}
                 >
-                  <span
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleLayerVisibility(layerId);
                     }}
-                    className={`text-xl mr-3 cursor-pointer ${
-                      layers[layerId].active ? 'text-white' : 'text-gray-900'
-                    }`}
+                    className="mr-2 cursor-pointer"
                   >
-                    {layers[layerId].visible ? '●' : '○'}
-                  </span>
+                    {layers[layerId].visible ? (
+                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                    )}
+                  </button>
                   <div className="flex-1">
-                    <div className="font-medium text-sm">{layerId === 1 ? 'Red Layer' : 'Green Layer'}</div>
-                    <div className="text-xs opacity-70">
+                    <div className="font-medium text-xs text-gray-300">{layerId === 1 ? 'Red Layer' : 'Green Layer'}</div>
+                    <div className="text-[10px] text-gray-300 opacity-70">
                       Drawing {layerId} {layers[layerId].active && '• Active'}
                     </div>
                   </div>
@@ -458,10 +517,10 @@ export const CanvasEditor: React.FC = () => {
             {/* Floating swap button between layers */}
             <button
               onClick={swapLayerOrder}
-              className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-all duration-200 hover:scale-110 shadow-sm group z-10"
+              className="absolute -right-1 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-800 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 hover:scale-110 shadow-sm group z-10"
               title="Swap layer order"
             >
-              <svg className="w-3.5 h-3.5 text-gray-600 group-hover:text-indigo-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
               </svg>
             </button>
@@ -470,12 +529,12 @@ export const CanvasEditor: React.FC = () => {
 
         {/* Overlay Controls */}
         {currentTool === 'overlay' && (
-          <div className="p-5 border-b border-gray-200">
-            <h3 className="text-sm font-semibold mb-4 text-gray-700">Overlay Controls</h3>
+          <div className="p-5 border-b border-gray-700">
+            <h3 className="text-sm font-semibold mb-4 text-gray-300">Overlay Controls</h3>
 
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-gray-600 flex justify-between mb-1">
+                <label className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>X Position</span>
                   <span>{activeLayer.transform.x}</span>
                 </label>
@@ -490,7 +549,7 @@ export const CanvasEditor: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs text-gray-600 flex justify-between mb-1">
+                <label className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>Y Position</span>
                   <span>{activeLayer.transform.y}</span>
                 </label>
@@ -505,7 +564,7 @@ export const CanvasEditor: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs text-gray-600 flex justify-between mb-1">
+                <label className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>Rotation</span>
                   <span>{activeLayer.transform.rotation}°</span>
                 </label>
@@ -520,7 +579,7 @@ export const CanvasEditor: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs text-gray-600 flex justify-between mb-1">
+                <label className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>Opacity</span>
                   <span>{Math.round(activeLayer.transform.opacity * 100)}%</span>
                 </label>
@@ -535,7 +594,7 @@ export const CanvasEditor: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs text-gray-600 flex justify-between mb-1">
+                <label className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>Scale</span>
                   <span>{Math.round(activeLayer.transform.scale * 100)}%</span>
                 </label>
