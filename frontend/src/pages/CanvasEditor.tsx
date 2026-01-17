@@ -76,12 +76,13 @@ export const CanvasEditor: React.FC = () => {
     const ctx = canvasCtxRef.current;
     if (!ctx) return;
 
-    // Set canvas size only if changed
-    const maxWidth = Math.max(images[1].width, images[2].width, 800);
-    const maxHeight = Math.max(images[1].height, images[2].height, 600);
-    if (canvas.width !== maxWidth || canvas.height !== maxHeight) {
-      canvas.width = maxWidth;
-      canvas.height = maxHeight;
+    // Set canvas to fixed rectangular size (landscape orientation)
+    const CANVAS_WIDTH = 1600;
+    const CANVAS_HEIGHT = 1200;
+    
+    if (canvas.width !== CANVAS_WIDTH || canvas.height !== CANVAS_HEIGHT) {
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = CANVAS_HEIGHT;
       canvasCtxRef.current = null; // Reset context on resize
       return renderCanvas(); // Re-render after resize
     }
@@ -92,6 +93,11 @@ export const CanvasEditor: React.FC = () => {
     // Clear canvas with black background
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate scale to fit images within canvas
+    const maxImageWidth = Math.max(images[1].width, images[2].width);
+    const maxImageHeight = Math.max(images[1].height, images[2].height);
+    const scaleToFit = Math.min(CANVAS_WIDTH / maxImageWidth, CANVAS_HEIGHT / maxImageHeight);
 
     // Draw layers in specified order
     layerOrder.forEach((layerId) => {
@@ -104,15 +110,16 @@ export const CanvasEditor: React.FC = () => {
       ctx.save();
       ctx.globalAlpha = layer.transform.opacity;
 
-      const scale = layer.transform.scale;
-      const centerX = img.width / 2;
-      const centerY = img.height / 2;
+      // Apply both fit-to-canvas scale and user's transform scale
+      const scale = layer.transform.scale * scaleToFit;
+      const centerX = (img.width * scaleToFit) / 2;
+      const centerY = (img.height * scaleToFit) / 2;
 
       ctx.translate(centerX + layer.transform.x, centerY + layer.transform.y);
       ctx.rotate((layer.transform.rotation * Math.PI) / 180);
       ctx.scale(scale, scale);
 
-      ctx.drawImage(img, -centerX, -centerY);
+      ctx.drawImage(img, -(img.width / 2), -(img.height / 2));
       ctx.restore();
     });
 
@@ -199,11 +206,13 @@ export const CanvasEditor: React.FC = () => {
             resolve(true);
           };
           img1.onerror = () => reject(new Error('Image 1 load failed'));
+          img1.crossOrigin = 'anonymous';
           img1.src = img1Url;
         }),
         new Promise((resolve, reject) => {
           img2.onload = () => resolve(true);
           img2.onerror = () => reject(new Error('Image 2 load failed'));
+          img2.crossOrigin = 'anonymous';
           img2.src = img2Url;
         }),
       ]);
@@ -876,7 +885,7 @@ export const CanvasEditor: React.FC = () => {
               currentTool === 'edit' ? 'cursor-crosshair' : 
               'cursor-default'
             }`}
-            style={{ maxWidth: '100%', maxHeight: '100%' }}
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

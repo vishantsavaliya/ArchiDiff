@@ -361,11 +361,29 @@ def get_processed_image(job_id, file_num):
         if not image_path.exists():
             return jsonify({'error': 'Test image not found'}), 404
         
-        return send_file(image_path, mimetype='image/png')
+        response = send_file(image_path, mimetype='image/png')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Cross-Origin-Resource-Policy'] = 'cross-origin'
+        return response
     
     # Normal job handling
+    # If job not in memory, try to find files on disk (handles server restart)
     if job_id not in processing_jobs:
-        return jsonify({'error': 'Job not found'}), 404
+        job_output = OUTPUT_FOLDER / job_id
+        if file_num == '1':
+            image_path = job_output / 'file1_final.png'
+        elif file_num == '2':
+            image_path = job_output / 'file2_final.png'
+        else:
+            return jsonify({'error': 'Invalid file number'}), 400
+        
+        if not image_path.exists():
+            return jsonify({'error': 'Job not found or image not ready'}), 404
+        
+        response = send_file(image_path, mimetype='image/png')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Cross-Origin-Resource-Policy'] = 'cross-origin'
+        return response
     
     job = processing_jobs[job_id]
     
@@ -379,7 +397,10 @@ def get_processed_image(job_id, file_num):
     if not image_path or not os.path.exists(image_path):
         return jsonify({'error': 'Image not ready'}), 404
     
-    return send_file(image_path, mimetype='image/png')
+    response = send_file(image_path, mimetype='image/png')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cross-Origin-Resource-Policy'] = 'cross-origin'
+    return response
 
 @app.route('/cleanup/<job_id>', methods=['DELETE'])
 def cleanup_job(job_id):
