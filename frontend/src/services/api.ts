@@ -5,6 +5,8 @@ export const API_ENDPOINTS = {
   SAM_REMOVER: 'http://localhost:5001',
   INTERACTIVE_OVERLAY: 'http://localhost:5002',
   LINE_SELECTOR: 'http://localhost:5003',
+  PROCESSING_API: 'http://localhost:5004',
+  IMAGE_EDITOR: 'http://localhost:5005',
 };
 
 // Create axios instances for each backend service
@@ -24,6 +26,20 @@ export const overlayAPI = axios.create({
 
 export const lineSelectorAPI = axios.create({
   baseURL: API_ENDPOINTS.LINE_SELECTOR,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const processingAPI = axios.create({
+  baseURL: API_ENDPOINTS.PROCESSING_API,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const imageEditorAPI = axios.create({
+  baseURL: API_ENDPOINTS.IMAGE_EDITOR,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -58,4 +74,7 @@ const handleApiError = (error: any) => {
 
 samAPI.interceptors.response.use((response) => response, handleApiError);
 overlayAPI.interceptors.response.use((response) => response, handleApiError);
+lineSelectorAPI.interceptors.response.use((response) => response, handleApiError);
+processingAPI.interceptors.response.use((response) => response, handleApiError);
+imageEditorAPI.interceptors.response.use((response) => response, handleApiError);
 lineSelectorAPI.interceptors.response.use((response) => response, handleApiError);

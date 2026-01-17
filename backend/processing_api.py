@@ -361,6 +361,21 @@ def get_status(job_id):
 @app.route('/image/<job_id>/<file_num>', methods=['GET'])
 def get_processed_image(job_id, file_num):
     """Get processed image"""
+    # Support test-job for development
+    if job_id == 'test-job':
+        if file_num == '1':
+            image_path = OUTPUT_FOLDER / 'test-job' / 'file1_final.png'
+        elif file_num == '2':
+            image_path = OUTPUT_FOLDER / 'test-job' / 'file2_final.png'
+        else:
+            return jsonify({'error': 'Invalid file number'}), 400
+        
+        if not image_path.exists():
+            return jsonify({'error': 'Test image not found'}), 404
+        
+        return send_file(image_path, mimetype='image/png')
+    
+    # Normal job handling
     if job_id not in processing_jobs:
         return jsonify({'error': 'Job not found'}), 404
     

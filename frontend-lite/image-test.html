@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Load Test</title>
+    <style>
+        body {
+            background: #2a2a2a;
+            color: white;
+            font-family: monospace;
+            padding: 20px;
+        }
+        img {
+            border: 2px solid #667eea;
+            margin: 10px;
+            max-width: 400px;
+        }
+        .info {
+            background: #1a1a1a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Load Test</h1>
+    <div class="info" id="status">Loading images...</div>
+    
+    <h2>Image 1:</h2>
+    <img id="img1" alt="Image 1">
+    <div id="img1-info"></div>
+    
+    <h2>Image 2:</h2>
+    <img id="img2" alt="Image 2">
+    <div id="img2-info"></div>
+    
+    <script>
+        const API_URL = 'http://localhost:5004';
+        const jobId = 'test-job';
+        
+        const img1 = document.getElementById('img1');
+        const img2 = document.getElementById('img2');
+        const status = document.getElementById('status');
+        
+        console.log('Loading from:', `${API_URL}/image/${jobId}/1`);
+        console.log('Loading from:', `${API_URL}/image/${jobId}/2`);
+        
+        img1.onload = function() {
+            document.getElementById('img1-info').textContent = 
+                `✓ Loaded: ${this.naturalWidth} x ${this.naturalHeight}px`;
+            console.log('Image 1 loaded:', this.naturalWidth, 'x', this.naturalHeight);
+            checkBothLoaded();
+        };
+        
+        img1.onerror = function() {
+            document.getElementById('img1-info').textContent = '✗ Failed to load';
+            document.getElementById('img1-info').style.color = 'red';
+            console.error('Image 1 failed to load');
+        };
+        
+        img2.onload = function() {
+            document.getElementById('img2-info').textContent = 
+                `✓ Loaded: ${this.naturalWidth} x ${this.naturalHeight}px`;
+            console.log('Image 2 loaded:', this.naturalWidth, 'x', this.naturalHeight);
+            checkBothLoaded();
+        };
+        
+        img2.onerror = function() {
+            document.getElementById('img2-info').textContent = '✗ Failed to load';
+            document.getElementById('img2-info').style.color = 'red';
+            console.error('Image 2 failed to load');
+        };
+        
+        function checkBothLoaded() {
+            if (img1.complete && img2.complete && img1.naturalWidth > 0 && img2.naturalWidth > 0) {
+                status.textContent = '✓ Both images loaded successfully!';
+                status.style.background = '#1a5a1a';
+            }
+        }
+        
+        img1.src = `${API_URL}/image/${jobId}/1`;
+        img2.src = `${API_URL}/image/${jobId}/2`;
+    </script>
+</body>
+</html>

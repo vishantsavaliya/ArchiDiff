@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { SAMRemover } from './pages/SAMRemover';
 import { OverlayComparison } from './pages/OverlayComparison';
 import { LineSelector } from './pages/LineSelector';
+import { CanvasEditor } from './pages/CanvasEditor';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -12,6 +13,7 @@ const Navigation: React.FC = () => {
   const navItems = [
     { path: '/', label: 'Home' },
     { path: '/dashboard', label: 'Dashboard' },
+    { path: '/canvas-editor', label: 'Canvas Editor' },
     { path: '/sam-remover', label: 'SAM Remover' },
     { path: '/overlay', label: 'Overlay Comparison' },
     { path: '/line-selector', label: 'Line Selector' },
@@ -53,6 +55,7 @@ function App() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/canvas-editor" element={<CanvasEditor />} />
           <Route path="/dashboard" element={<><Navigation /><Dashboard /></>} />
           <Route path="/sam-remover" element={<><Navigation /><SAMRemover /></>} />
           <Route path="/overlay" element={<><Navigation /><OverlayComparison /></>} />

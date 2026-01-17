@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vishant's Canvas - Layer Editor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Left Toolbar */
+        .toolbar {
+            width: 80px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+        }
+        
+        .tool-btn {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            background: white;
+        }
+        
+        .tool-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        .tool-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .tool-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        .tool-label {
+            font-size: 9px;
+            text-align: center;
+        }
+        
+        /* Main Canvas Area */
+        .canvas-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #2a2a2a;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .canvas-header {
+            background: #1a1a1a;
+            padding: 15px 20px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        #mainCanvas {
+            background: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            cursor: crosshair;
+            min-width: 800px;
+            min-height: 600px;
+            display: block;
+        }
+        
+        #mainCanvas.resize-mode {
+            cursor: nwse-resize;
+        }
+        
+        #mainCanvas.crop-mode {
+            cursor: crosshair;
+        }
+        
+        /* Right Sidebar - Layers & Controls */
+        .sidebar-right {
+            width: 320px;
+            min-width: 250px;
+            max-width: 600px;
+            background: white;
+            border-left: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .resize-handle {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            cursor: ew-resize;
+            background: transparent;
+            z-index: 10;
+        }
+        
+        .resize-handle:hover {
+            background: #667eea;
+        }
+        
+        .panel {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        /* Layer Item */
+        .layer-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f8f8f8;
+        }
+        
+        .layer-item:hover {
+            background: #f0f0f0;
+        }
+        
+        .layer-item.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .layer-visibility {
+            font-size: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+        }
+        
+        .layer-info {
+            flex: 1;
+        }
+        
+        .layer-name {
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .layer-status {
+            font-size: 11px;
+            opacity: 0.7;
+        }
+        
+        /* Controls */
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        input[type="number"] {
+            width: 70px;
+            padding: 5px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        /* Tool-specific panels */
+        .tool-panel {
+            display: none;
+        }
+        
+        .tool-panel.active {
+            display: block;
+        }
+        
+        .point-marker {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: red;
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        
+        .status-message {
+            background: #667eea;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Left Toolbar -->
+    <div class="toolbar">
+        <div class="tool-btn active" onclick="switchTool('overlay')" id="tool-overlay">
+            <div class="tool-icon">▦</div>
+            <div class="tool-label">Overlay</div>
+        </div>
+        <div class="tool-btn" onclick="switchTool('sam')" id="tool-sam">
+            <div class="tool-icon">◎</div>
+            <div class="tool-label">SAM</div>
+        </div>
+        <div class="tool-btn" onclick="switchTool('lines')" id="tool-lines">
+            <div class="tool-icon">⏤</div>
+            <div class="tool-label">Lines</div>
+        </div>
+        <div class="tool-btn" onclick="switchTool('resize')" id="tool-resize">
+            <div class="tool-icon">⇲</div>
+            <div class="tool-label">Resize</div>
+        </div>
+        <div class="tool-btn" onclick="switchTool('crop')" id="tool-crop">
+            <div class="tool-icon">⊡</div>
+            <div class="tool-label">Crop</div>
+        </div>
+        <div style="flex: 1"></div>
+        <button class="tool-btn" onclick="startOver()" style="margin-top: auto;">
+            <div class="tool-icon">⌂</div>
+            <div class="tool-label">Home</div>
+        </button>
+    </div>
+    
+    <!-- Main Canvas Area -->
+    <div class="canvas-area">
+        <div class="canvas-header">
+            <h2 style="font-size: 18px;">Vishant's Canvas</h2>
+            <div id="statusText" style="font-size: 14px; opacity: 0.8;"></div>
+        </div>
+        <div class="canvas-container">
+            <div id="loadingIndicator" style="position: absolute; color: white; font-size: 16px; z-index: 5;">
+                Loading images...
+            </div>
+            <canvas id="mainCanvas"></canvas>
+        </div>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div class="sidebar-right" id="sidebar">
+        <div class="resize-handle" id="resizeHandle"></div>
+        <!-- Layers Panel -->
+        <div class="panel">
+            <div class="panel-title">Layers</div>
+            
+            <div class="layer-item active" id="layer1" onclick="setActiveLayer(1)">
+                <span class="layer-visibility" onclick="toggleLayerVisibility(1, event)">●</span>
+                <div class="layer-info">
+                    <div class="layer-name">Layer 1</div>
+                    <div class="layer-status">Drawing 1 • Active</div>
+                </div>
+            </div>
+            
+            <div class="layer-item" id="layer2" onclick="setActiveLayer(2)">
+                <span class="layer-visibility" onclick="toggleLayerVisibility(2, event)">●</span>
+                <div class="layer-info">
+                    <div class="layer-name">Layer 2</div>
+                    <div class="layer-status">Drawing 2</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Overlay Controls -->
+        <div class="panel tool-panel active" id="panel-overlay">
+            <div class="panel-title">Overlay Controls</div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Active Layer</span>
+                    <span id="activeLayerLabel">Layer 1</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>X Position</span>
+                    <input type="number" id="overlayX" value="0" oninput="updateOverlay()" onchange="updateOverlay()">
+                </div>
+                <input type="range" id="overlayXSlider" min="-500" max="500" value="0" oninput="document.getElementById('overlayX').value=this.value; updateOverlay()">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Y Position</span>
+                    <input type="number" id="overlayY" value="0" oninput="updateOverlay()" onchange="updateOverlay()">
+                </div>
+                <input type="range" id="overlayYSlider" min="-500" max="500" value="0" oninput="document.getElementById('overlayY').value=this.value; updateOverlay()">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Rotation</span>
+                    <input type="number" id="overlayRotation" value="0" oninput="updateOverlay()" onchange="updateOverlay()">
+                </div>
+                <input type="range" id="overlayRotationSlider" min="-180" max="180" value="0" oninput="document.getElementById('overlayRotation').value=this.value; updateOverlay()">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Opacity</span>
+                    <input type="number" id="overlayOpacity" value="100" min="0" max="100" oninput="updateOverlay()" onchange="updateOverlay()">
+                </div>
+                <input type="range" id="overlayOpacitySlider" min="0" max="100" value="100" oninput="document.getElementById('overlayOpacity').value=this.value; updateOverlay()">
+            </div>
+            
+            <button class="btn btn-small" onclick="resetLayerTransform()">Reset Transform</button>
+            <button class="btn btn-small btn-secondary" onclick="downloadCanvas()">Download View</button>
+        </div>
+        
+        <!-- SAM Controls -->
+        <div class="panel tool-panel" id="panel-sam">
+            <div class="panel-title">SAM Remover</div>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Click on annotations to remove them</p>
+            
+            <div class="control-group">
+                <button class="btn" onclick="processSAM()">Remove Selected</button>
+                <button class="btn btn-secondary" onclick="clearSAMPoints()">Clear Points</button>
+            </div>
+            
+            <div id="samStatus"></div>
+        </div>
+        
+        <!-- Line Selector Controls -->
+        <div class="panel tool-panel" id="panel-lines">
+            <div class="panel-title">Line Selector</div>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Click on lines to detect and remove them</p>
+            
+            <div class="control-group">
+                <button class="btn" onclick="processLines()">Remove Selected</button>
+                <button class="btn btn-secondary" onclick="clearLinePoints()">Clear Points</button>
+            </div>
+            
+            <div id="lineStatus"></div>
+        </div>
+        
+        <!-- Resize Tool Panel -->
+        <div class="panel tool-panel" id="panel-resize">
+            <div class="panel-title">Resize Image</div>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Click and drag vertically on canvas to resize</p>
+            
+            <div class="control-group">
+                <label>Scale (%)</label>
+                <input type="number" id="scaleInput" value="100" min="10" max="500" step="10" onchange="applyScale()">
+            </div>
+            
+            <button class="btn btn-secondary" style="width: 100%; margin-top: 10px;" onclick="resetScale()">
+                Reset Scale
+            </button>
+        </div>
+        
+        <!-- Crop Tool Panel -->
+        <div class="panel tool-panel" id="panel-crop">
+            <div class="panel-title">Crop Image</div>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Click and drag to select crop area</p>
+            
+            <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="applyCrop()">
+                Apply Crop
+            </button>
+            <button class="btn btn-secondary" style="width: 100%;" onclick="cancelCrop()">
+                Cancel
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:5004';
+        const SAM_URL = 'http://localhost:5001';
+        const LINE_URL = 'http://localhost:5003';
+        
+        let jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
+        const TEST_MODE = !localStorage.getItem('dashboard_job_id');
+        
+        // Layer state
+        let layers = {
+            1: {
+                image: new Image(),
+                visible: true,
+                active: true,
+                transform: { x: 0, y: 0, rotation: 0, opacity: 1.0, scale: 1.0 }
+            },
+            2: {
+                image: new Image(),
+                visible: true,
+                active: false,
+                transform: { x: 0, y: 0, rotation: 0, opacity: 1.0, scale: 1.0 }
+            }
+        };
+        
+        let currentTool = 'overlay';
+        let samPoints = [];
+        let linePoints = [];
+        let cropRect = null;
+        let isResizingImg = false;
+        let isDragging = false;
+        let dragStart = null;
+        let isResizingSidebar = false;
+        let startX, startWidth;
+        
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // Set initial canvas size so it's visible
+        canvas.width = 800;
+        canvas.height = 600;
+        
+        // Load images
+        if (TEST_MODE) {
+            console.log('TEST MODE: Loading from backend test-job folder');
+            document.getElementById('statusText').textContent = 'TEST MODE';
+        }
+        
+        const img1Url = TEST_MODE ? 'test/image1.png' : `${API_URL}/image/${jobId}/1`;
+        const img2Url = TEST_MODE ? 'test/image2.png' : `${API_URL}/image/${jobId}/2`;
+        
+        console.log('Loading images from:', img1Url, img2Url);
+        
+        // Wait for both images to load (set up handlers BEFORE setting src)
+        Promise.all([
+            new Promise((resolve, reject) => {
+                layers[1].image.onload = () => {
+                    console.log('Image 1 loaded:', layers[1].image.width, 'x', layers[1].image.height);
+                    resolve();
+                };
+                layers[1].image.onerror = () => {
+                    console.error('Failed to load image 1 from', img1Url);
+                    loadingIndicator.textContent = 'Error loading image 1';
+                    loadingIndicator.style.color = 'red';
+                    reject(new Error('Image 1 failed to load'));
+                };
+                
+                // Set src after handlers are ready (or check if already loaded from cache)
+                layers[1].image.src = img1Url;
+                
+                // If image is already loaded from cache, resolve immediately
+                if (layers[1].image.complete && layers[1].image.naturalWidth > 0) {
+                    console.log('Image 1 already loaded from cache');
+                    resolve();
+                }
+            }),
+            new Promise((resolve, reject) => {
+                layers[2].image.onload = () => {
+                    console.log('Image 2 loaded:', layers[2].image.width, 'x', layers[2].image.height);
+                    resolve();
+                };
+                layers[2].image.onerror = () => {
+                    console.error('Failed to load image 2 from', img2Url);
+                    loadingIndicator.textContent = 'Error loading image 2';
+                    loadingIndicator.style.color = 'red';
+                    reject(new Error('Image 2 failed to load'));
+                };
+                
+                // Set src after handlers are ready
+                layers[2].image.src = img2Url;
+                
+                // If image is already loaded from cache, resolve immediately
+                if (layers[2].image.complete && layers[2].image.naturalWidth > 0) {
+                    console.log('Image 2 already loaded from cache');
+                    resolve();
+                }
+            })
+        ]).then(() => {
+            console.log('Both images loaded successfully');
+            loadingIndicator.style.display = 'none';
+            initCanvas();
+            renderCanvas();
+            document.getElementById('statusText').textContent = TEST_MODE ? 'TEST MODE - Ready' : 'Ready';
+        }).catch(err => {
+            console.error('Error loading images:', err);
+            document.getElementById('statusText').textContent = 'Error loading images';
+        });
+        
+        function initCanvas() {
+            const maxWidth = Math.max(layers[1].image.width, layers[2].image.width, 800);
+            const maxHeight = Math.max(layers[1].image.height, layers[2].image.height, 600);
+            canvas.width = maxWidth;
+            canvas.height = maxHeight;
+            console.log('Canvas initialized:', maxWidth, 'x', maxHeight);
+        }
+        
+        function renderCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Layer 2 (red) first, then Layer 1 (green) on top
+            [2, 1].forEach(layerNum => {
+                const layer = layers[layerNum];
+                if (!layer.visible || !layer.image.complete) return;
+
+                ctx.save();
+
+                // Apply transforms
+                ctx.globalAlpha = layer.transform.opacity;
+                const scale = layer.transform.scale || 1.0;
+
+                // Get image dimensions
+                const imgWidth = layer.image.width;
+                const imgHeight = layer.image.height;
+
+                // Calculate center point of image
+                const centerX = imgWidth / 2;
+                const centerY = imgHeight / 2;
+
+                // Move to image center, apply transforms, then draw centered
+                ctx.translate(centerX + layer.transform.x, centerY + layer.transform.y);
+                ctx.rotate(layer.transform.rotation * Math.PI / 180);
+                ctx.scale(scale, scale);
+
+                // --- Draw image ---
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.drawImage(layer.image, -centerX, -centerY);
+
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.restore();
+            });
+            
+            // Draw tool-specific overlays
+            if (currentTool === 'sam') {
+                drawSAMPoints();
+            } else if (currentTool === 'lines') {
+                drawLinePoints();
+            } else if (currentTool === 'crop' && cropRect) {
+                drawCropRect();
+            }
+        }
+        
+        function setActiveLayer(layerNum) {
+            layers[1].active = layerNum === 1;
+            layers[2].active = layerNum === 2;
+            
+            document.getElementById('layer1').classList.toggle('active', layerNum === 1);
+            document.getElementById('layer2').classList.toggle('active', layerNum === 2);
+            
+            const layer1Status = document.querySelector('#layer1 .layer-status');
+            const layer2Status = document.querySelector('#layer2 .layer-status');
+            layer1Status.textContent = layerNum === 1 ? 'Drawing 1 • Active' : 'Drawing 1';
+            layer2Status.textContent = layerNum === 2 ? 'Drawing 2 • Active' : 'Drawing 2';
+            
+            document.getElementById('activeLayerLabel').textContent = `Layer ${layerNum}`;
+            
+            // Update controls to show active layer's transform
+            const t = layers[layerNum].transform;
+            document.getElementById('overlayX').value = t.x;
+            document.getElementById('overlayXSlider').value = t.x;
+            document.getElementById('overlayY').value = t.y;
+            document.getElementById('overlayYSlider').value = t.y;
+            document.getElementById('overlayRotation').value = t.rotation;
+            document.getElementById('overlayRotationSlider').value = t.rotation;
+            document.getElementById('overlayOpacity').value = Math.round(t.opacity * 100);
+            document.getElementById('overlayOpacitySlider').value = Math.round(t.opacity * 100);
+            
+            // Update scale input if exists
+            const scaleInput = document.getElementById('scaleInput');
+            if (scaleInput) {
+                scaleInput.value = Math.round((t.scale || 1.0) * 100);
+            }
+            
+            renderCanvas();
+        }
+        
+        function toggleLayerVisibility(layerNum, event) {
+            event.stopPropagation();
+            layers[layerNum].visible = !layers[layerNum].visible;
+            
+            const icon = event.target;
+            icon.textContent = layers[layerNum].visible ? '●' : '○';
+            
+            renderCanvas();
+        }
+        
+        function updateOverlay() {
+            const activeLayer = layers[1].active ? 1 : 2;
+            const t = layers[activeLayer].transform;
+            
+            t.x = parseFloat(document.getElementById('overlayX').value) || 0;
+            t.y = parseFloat(document.getElementById('overlayY').value) || 0;
+            t.rotation = parseFloat(document.getElementById('overlayRotation').value) || 0;
+            t.opacity = (parseFloat(document.getElementById('overlayOpacity').value) || 100) / 100;
+            
+            renderCanvas();
+        }
+        
+        function resetLayerTransform() {
+            const activeLayer = layers[1].active ? 1 : 2;
+            layers[activeLayer].transform = { x: 0, y: 0, rotation: 0, opacity: 1.0, scale: 1.0 };
+            setActiveLayer(activeLayer); // Update controls
+        }
+        
+        function switchTool(toolName) {
+            currentTool = toolName;
+            
+            // Update toolbar
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tool-${toolName}`).classList.add('active');
+            
+            // Update panels
+            document.querySelectorAll('.tool-panel').forEach(panel => panel.classList.remove('active'));
+            document.getElementById(`panel-${toolName}`).classList.add('active');
+            
+            // Clear tool state
+            samPoints = [];
+            linePoints = [];
+            
+            renderCanvas();
+        }
+        
+        // Canvas click handler
+        canvas.addEventListener('click', (e) => {
+            if (currentTool === 'overlay') return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (currentTool === 'sam') {
+                samPoints.push({ x, y });
+                renderCanvas();
+            } else if (currentTool === 'lines') {
+                linePoints.push({ x, y });
+                renderCanvas();
+            }
+        });
+        
+        function drawSAMPoints() {
+            samPoints.forEach(pt => {
+                ctx.fillStyle = 'red';
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+        }
+        
+        function drawLinePoints() {
+            linePoints.forEach(pt => {
+                ctx.fillStyle = 'blue';
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+        }
+        
+        function clearSAMPoints() {
+            samPoints = [];
+            renderCanvas();
+        }
+        
+        function clearLinePoints() {
+            linePoints = [];
+            renderCanvas();
+        }
+        
+        async function processSAM() {
+            if (samPoints.length === 0) {
+                alert('Please click on annotations to mark them');
+                return;
+            }
+            
+            const activeLayer = layers[1].active ? 1 : 2;
+            document.getElementById('samStatus').innerHTML = '<div class="status-message">Processing...</div>';
+            
+            try {
+                const response = await fetch(`${SAM_URL}/process`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_url: `${API_URL}/image/${jobId}/${activeLayer}`,
+                        points: samPoints
+                    })
+                });
+                
+                const result = await response.json();
+                
+                // Reload the active layer image
+                layers[activeLayer].image.src = `${API_URL}/image/${jobId}/${activeLayer}?t=${Date.now()}`;
+                layers[activeLayer].image.onload = () => {
+                    samPoints = [];
+                    renderCanvas();
+                    document.getElementById('samStatus').innerHTML = '<div class="status-message">✓ Removed!</div>';
+                };
+            } catch (error) {
+                document.getElementById('samStatus').innerHTML = '<div class="status-message" style="background: #dc3545;">Error processing</div>';
+            }
+        }
+        
+        async function processLines() {
+            if (linePoints.length === 0) {
+                alert('Please click on lines to mark them');
+                return;
+            }
+            
+            const activeLayer = layers[1].active ? 1 : 2;
+            document.getElementById('lineStatus').innerHTML = '<div class="status-message">Processing...</div>';
+            
+            try {
+                const response = await fetch(`${LINE_URL}/process`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_url: `${API_URL}/image/${jobId}/${activeLayer}`,
+                        points: linePoints
+                    })
+                });
+                
+                const result = await response.json();
+                
+                // Reload the active layer image
+                layers[activeLayer].image.src = `${API_URL}/image/${jobId}/${activeLayer}?t=${Date.now()}`;
+                layers[activeLayer].image.onload = () => {
+                    linePoints = [];
+                    renderCanvas();
+                    document.getElementById('lineStatus').innerHTML = '<div class="status-message">✓ Removed!</div>';
+                };
+            } catch (error) {
+                document.getElementById('lineStatus').innerHTML = '<div class="status-message" style="background: #dc3545;">Error processing</div>';
+            }
+        }
+        
+        function downloadCanvas() {
+            const link = document.createElement('a');
+            link.download = `vishants-canvas-${Date.now()}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        function startOver() {
+            if (confirm('Return to home? Your edits will be saved.')) {
+                window.location.href = 'index.html';
+            }
+        }
+        
+        // ===== SIDEBAR RESIZE FUNCTIONALITY =====
+        const sidebar = document.getElementById('sidebar');
+        const resizeHandle = document.getElementById('resizeHandle');
+        
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizingSidebar = true;
+            startX = e.clientX;
+            startWidth = parseInt(getComputedStyle(sidebar).width, 10);
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizingSidebar) return;
+            const width = startWidth - (e.clientX - startX);
+            if (width >= 250 && width <= 600) {
+                sidebar.style.width = width + 'px';
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizingSidebar) {
+                isResizingSidebar = false;
+                document.body.style.cursor = '';
+            }
+        });
+        
+        // ===== IMAGE RESIZE & CROP FUNCTIONALITY =====
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (currentTool === 'resize') {
+                isResizingImg = true;
+                dragStart = { x, y };
+                canvas.style.cursor = 'nwse-resize';
+            } else if (currentTool === 'crop') {
+                isDragging = true;
+                cropRect = { startX: x, startY: y, endX: x, endY: y };
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isResizingImg && !isDragging) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (isResizingImg && dragStart) {
+                const activeLayer = layers[1].active ? 1 : 2;
+                const deltaY = y - dragStart.y;
+                const scaleChange = deltaY / 500;
+                const newScale = Math.max(0.1, Math.min(5.0, layers[activeLayer].transform.scale - scaleChange));
+                layers[activeLayer].transform.scale = newScale;
+                document.getElementById('scaleInput').value = Math.round(newScale * 100);
+                dragStart = { x, y };
+                renderCanvas();
+            } else if (isDragging && cropRect) {
+                cropRect.endX = x;
+                cropRect.endY = y;
+                renderCanvas();
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            if (isResizingImg) {
+                isResizingImg = false;
+                dragStart = null;
+                canvas.style.cursor = 'crosshair';
+            } else if (isDragging) {
+                isDragging = false;
+            }
+        });
+        
+        // Scale functions
+        function applyScale() {
+            const activeLayer = layers[1].active ? 1 : 2;
+            const scale = parseFloat(document.getElementById('scaleInput').value) / 100;
+            layers[activeLayer].transform.scale = Math.max(0.1, Math.min(5.0, scale));
+            renderCanvas();
+        }
+        
+        function resetScale() {
+            const activeLayer = layers[1].active ? 1 : 2;
+            layers[activeLayer].transform.scale = 1.0;
+            document.getElementById('scaleInput').value = 100;
+            renderCanvas();
+        }
+        
+        // Crop functions
+        function drawCropRect() {
+            if (!cropRect) return;
+            
+            ctx.save();
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            const x = Math.min(cropRect.startX, cropRect.endX);
+            const y = Math.min(cropRect.startY, cropRect.endY);
+            const w = Math.abs(cropRect.endX - cropRect.startX);
+            const h = Math.abs(cropRect.endY - cropRect.startY);
+            
+            ctx.strokeRect(x, y, w, h);
+            
+            // Darken outside area
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fillRect(0, 0, canvas.width, y);
+            ctx.fillRect(0, y, x, h);
+            ctx.fillRect(x + w, y, canvas.width - (x + w), h);
+            ctx.fillRect(0, y + h, canvas.width, canvas.height - (y + h));
+            
+            ctx.restore();
+        }
+        
+        function applyCrop() {
+            if (!cropRect) {
+                alert('Please select a crop area first');
+                return;
+            }
+            
+            const x = Math.min(cropRect.startX, cropRect.endX);
+            const y = Math.min(cropRect.startY, cropRect.endY);
+            const w = Math.abs(cropRect.endX - cropRect.startX);
+            const h = Math.abs(cropRect.endY - cropRect.startY);
+            
+            if (w < 10 || h < 10) {
+                alert('Crop area too small');
+                return;
+            }
+            
+            const activeLayer = layers[1].active ? 1 : 2;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            tempCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+            
+            const croppedImg = new Image();
+            croppedImg.onload = () => {
+                layers[activeLayer].image = croppedImg;
+                canvas.width = w;
+                canvas.height = h;
+                layers[activeLayer].transform = { x: 0, y: 0, rotation: 0, opacity: 1.0, scale: 1.0 };
+                cropRect = null;
+                renderCanvas();
+                console.log('Crop applied successfully');
+            };
+            croppedImg.src = tempCanvas.toDataURL();
+        }
+        
+        function cancelCrop() {
+            cropRect = null;
+            canvas.style.cursor = 'crosshair';
+            renderCanvas();
+        }
+    </script>
+</body>
+</html>

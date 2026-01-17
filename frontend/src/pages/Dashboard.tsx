@@ -53,6 +53,13 @@ export const Dashboard: React.FC = () => {
     navigate('/overlay');
   };
 
+  const handleCanvasEditor = () => {
+    if (!images) return;
+    // Pass job ID to canvas editor
+    localStorage.setItem('dashboard_job_id', images.jobId);
+    navigate('/canvas-editor');
+  };
+
   const handleSAMRemover = (imageNum: 1 | 2) => {
     if (!images) return;
     // Store selected image URL for SAM tool
@@ -244,8 +251,34 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-2xl font-bold mb-2 flex items-center">
+                <span className="text-4xl mr-3">🎨</span>
+                Canvas Editor (New!)
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 mb-4">
+                Advanced layer-based editor with overlay, transform controls, and green transparent mode. Replaces old overlay tool.
+              </p>
+              <div className="flex gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 rounded">✓ Layer controls</span>
+                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded">✓ Transform tools</span>
+                <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 rounded">✓ Backend processing</span>
+              </div>
+            </div>
+            <button
+              onClick={handleCanvasEditor}
+              className="btn-primary text-lg px-8 py-4 bg-green-600 hover:bg-green-700"
+            >
+              Open Editor →
+            </button>
+          </div>
+        </div>
+
+        {/* Compare Both Images */}
+        <div className="card mb-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-800">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold mb-2 flex items-center">
                 <span className="text-4xl mr-3">🔄</span>
-                Overlay Comparison
+                Overlay Comparison (Classic)
               </h3>
               <p className="text-gray-700 dark:text-gray-300 mb-4">
                 Compare both drawings side-by-side with red/green/blue overlay. Adjust position, rotation, and scale to align perfectly.

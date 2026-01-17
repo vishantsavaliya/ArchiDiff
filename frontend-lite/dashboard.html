@@ -304,7 +304,7 @@
         <!-- Images View -->
         <div class="tool-content active" id="content-images">
             <h1>📊 Your Processed Images</h1>
-            <p style="color: #666; margin-bottom: 20px;">Select a tool from the sidebar to start editing</p>
+            <p style="color: #666; margin-bottom: 20px;" id="dashboardSubtitle">Select a tool from the sidebar to start editing</p>
             <div class="images-grid" id="imagesGrid"></div>
         </div>
         
@@ -394,10 +394,11 @@
     
     <script>
         const API_URL = 'http://localhost:5004';
-        let jobId = localStorage.getItem('dashboard_job_id') || 'test';
+        let jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
         let file1Name = localStorage.getItem('dashboard_file1') || 'Drawing 1';
         let file2Name = localStorage.getItem('dashboard_file2') || 'Drawing 2';
         let cleanupScheduled = false;
+        const TEST_MODE = !localStorage.getItem('dashboard_job_id');
         
         // Tool state
         let overlayTransform = { dx: 0, dy: 0, rotation: 0, scale: 1.0, opacity: 1.0 };
@@ -408,14 +409,20 @@
         let lineCurrentImage = 1;
         let selectedLines = [];
         
-        // Load images from test folder for development
-        image1.src = '/test/image1.png';
-        image2.src = '/test/image2.png';
+        // Load images from backend test job for development (skips upload)
+        if (TEST_MODE) {
+            console.log('🧪 TEST MODE: Loading from backend test-job folder');
+            image1.src = `${API_URL}/image/test-job/1`;
+            image2.src = `${API_URL}/image/test-job/2`;
+        } else {
+            image1.src = `${API_URL}/image/${jobId}/1`;
+            image2.src = `${API_URL}/image/${jobId}/2`;
+        }
         
         // Global function to reload an image after editing (used by all tools)
         function reloadImage(imageNum) {
             const timestamp = Date.now();
-            const newSrc = `/test/image${imageNum}.png?t=${timestamp}`;
+            const newSrc = `${API_URL}/image/${jobId}/${imageNum}?t=${timestamp}`;
             
             if (imageNum === 1) {
                 image1.src = newSrc;
@@ -518,7 +525,7 @@
         
         function loadSAMImage(imageNum) {
             const img = document.getElementById('samImage');
-            img.src = `/test/image${imageNum}.png`;
+            img.src = `${API_URL}/image/${jobId}/${imageNum}`;
         }
         
         function loadLineImage(imageNum) {
@@ -1035,8 +1042,10 @@
             if (!confirm('Start over? This will clear your current session.')) return;
             
             // Cleanup current job
-            fetch(`${API_URL}/cleanup/${jobId}`, { method: 'DELETE' })
-                .catch(err => console.log('Cleanup error:', err));
+            if (!TEST_MODE) {
+                fetch(`${API_URL}/cleanup/${jobId}`, { method: 'DELETE' })
+                    .catch(err => console.log('Cleanup error:', err));
+            }
             
             localStorage.removeItem('dashboard_job_id');
             localStorage.removeItem('dashboard_file1');
@@ -1046,6 +1055,30 @@
             localStorage.removeItem('line_selector_image_url');
             
             window.location.href = 'index.html';
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            if (TEST_MODE) {
+                const subtitle = document.getElementById('dashboardSubtitle');
+                subtitle.innerHTML = '🧪 <strong>TEST MODE</strong> - Using images from backend/processed/test-job/ (upload skipped)';
+                subtitle.style.color = '#ff9800';
+            }
+            loadImages();
+        });
+        
+        function loadImages() {
+            const grid = document.getElementById('imagesGrid');
+            grid.innerHTML = `
+                <div class="image-card">
+                    <h3>📄 ${file1Name}</h3>
+                    <img src="${image1.src}" alt="Image 1">
+                </div>
+                <div class="image-card">
+                    <h3>📄 ${file2Name}</h3>
+                    <img src="${image2.src}" alt="Image 2">
+                </div>
+            `;
         }
     </script>
 </body>
