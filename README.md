@@ -44,6 +44,7 @@ pip install -r requirements.txt
 3. **Configure Environment**
 
 Create `backend/.env` file:
+
 ```bash
 GEMINI_API_KEY=your_api_key_here
 ```

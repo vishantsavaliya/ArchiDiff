@@ -77,7 +77,10 @@ const [file2, setFile2] = useState<File | null>(null);
 const [removeText, setRemoveText] = useState(true);
 const [processing, setProcessing] = useState(false);
 const [status, setStatus] = useState<ProcessingStatus | null>(null);
-const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
+const [message, setMessage] = useState<{
+  type: "info" | "success" | "error";
+  text: string;
+} | null>(null);
 ```
 
 **Upload Flow**:

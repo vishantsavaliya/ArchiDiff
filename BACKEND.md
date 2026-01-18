@@ -127,13 +127,13 @@ max_dimension = 1024               # Resize images for API
 class GeminiAnalyzer:
     def __init__(self):
         # Load API key and configure model
-    
+
     def resize_for_api(self, image_path, max_dimension=1024):
         # Resize image to reduce payload size
-    
+
     def analyze_images(self, image1_path, image2_path):
         # Send to Gemini and get comparison analysis
-    
+
     def analyze_from_job(self, job_folder):
         # Analyze from job folder paths
 ```
@@ -571,7 +571,7 @@ with ThreadPoolExecutor(max_workers=2) as executor:
 
 ```python
 analysis_thread = threading.Thread(
-    target=analyze_job_async, 
+    target=analyze_job_async,
     args=(job_id, str(OUTPUT_FOLDER))
 )
 analysis_thread.daemon = True
@@ -581,15 +581,18 @@ analysis_thread.start()  # Non-blocking
 ### Performance Optimizations
 
 **Caching**:
+
 - Analysis results cached to `analysis.txt`
 - Skip analysis if file already exists
 - Instant retrieval on subsequent requests
 
 **Debouncing**:
+
 - Slider operations use `onInput` instead of `onChange`
 - Reduces render calls during dragging
 
 **Smart Polling**:
+
 - Frontend polls every 5 seconds
 - Stops automatically when analysis ready
 - Prevents unnecessary API calls
