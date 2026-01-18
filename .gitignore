@@ -8,6 +8,12 @@ venv/
 env/
 ENV/
 
+# Environment variables (contains API keys)
+.env
+*.env
+.env.local
+.env.*.local
+
 # IDE
 .vscode/
 .idea/
@@ -22,6 +28,8 @@ Thumbs.db
 backend/converted/
 backend/details/
 backend/examples/
+backend/uploads/
+backend/processed/
 backend/*.pt
 backend/*.pth
 

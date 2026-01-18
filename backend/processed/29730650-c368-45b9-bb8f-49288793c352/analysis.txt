@@ -1,3 +1,0 @@
-Both drawings are high-level plans of an elevator cab interior and do not provide details on the structural components of the wall, such as framing, gypsum board (GWB), or internal blocking. Consequently, no key structural differences in how the wall is constructed or layered can be identified from the provided information.
-
-The only discernible difference in wall layering is related to the explicit mention of the interior finish. Drawing 1 specifies "CUSTOM WALL PANELS" as the interior finish for the cab walls. Drawing 2, while specifying the floor finish as Terrazzo, does not explicitly label the wall finish, making it a simpler representation in terms of specified finish material, potentially indicating a standard cab finish or an omission of this specific detail.
