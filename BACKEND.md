@@ -16,6 +16,7 @@ Detailed documentation for ArchiDiff backend processing pipeline and API server.
 ## Overview
 
 The backend is a Flask-based REST API server that handles:
+
 - File uploads (PDF, PNG, JPG)
 - PDF to PNG conversion
 - Image upscaling (1.5X using bicubic interpolation)
@@ -52,6 +53,7 @@ backend/
 **Purpose**: Flask REST API that orchestrates the entire processing pipeline.
 
 **Key Features**:
+
 - Multi-file upload handling (2 files at a time)
 - Background job processing with progress tracking
 - File validation and security checks
@@ -59,6 +61,7 @@ backend/
 - CORS enabled for frontend communication
 
 **Configuration**:
+
 ```python
 UPLOAD_FOLDER = Path('uploads')        # Temporary uploads
 OUTPUT_FOLDER = Path('processed')      # Final output
@@ -74,6 +77,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 - `allowed_file(filename)`: Validate file extensions
 
 **Processing Steps**:
+
 1. Validate and save uploaded files
 2. Convert PDFs to PNG (if needed) using Poppler
 3. Upscale images 1.5X using bicubic interpolation
@@ -81,6 +85,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 5. Save final images to `processed/{job_id}/`
 
 **Error Handling**:
+
 - Invalid file types rejected
 - File size limits enforced
 - Graceful fallbacks for processing errors
@@ -100,13 +105,13 @@ Uses **bicubic interpolation** (not Real-ESRGAN model) for 1.5X upscaling:
 def upscale_bicubic(input_path, output_path, scale_factor=1.5):
     """
     Upscale image using bicubic interpolation
-    
+
     Algorithm:
     1. Load image with OpenCV
     2. Calculate new dimensions (width*1.5, height*1.5)
     3. Apply cv2.INTER_CUBIC interpolation
     4. Save high-quality result
-    
+
     Why Bicubic?
     - Fast processing (~0.5-2 seconds per image)
     - Good quality for architectural drawings
@@ -116,25 +121,28 @@ def upscale_bicubic(input_path, output_path, scale_factor=1.5):
     image = cv2.imread(str(input_path))
     h, w = image.shape[:2]
     new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-    
+
     upscaled = cv2.resize(
-        image, 
-        (new_w, new_h), 
+        image,
+        (new_w, new_h),
         interpolation=cv2.INTER_CUBIC
     )
-    
+
     cv2.imwrite(str(output_path), upscaled)
 ```
 
 **Performance**:
+
 - 1000x1000 image → 1500x1500 in ~0.5 seconds
 - 4000x4000 image → 6000x6000 in ~2 seconds
 
-**Memory Usage**: 
+**Memory Usage**:
+
 - Minimal (< 100MB for 4000x4000 images)
 - Scales linearly with image size
 
 **Command Line Usage**:
+
 ```bash
 # Single file
 python3 upscale_realesrgan.py input.png output.png
@@ -157,24 +165,24 @@ Uses **EasyOCR** library to detect and remove text:
 def remove_text_easyocr(image_path, output_path):
     """
     Text removal pipeline using EasyOCR + OpenCV inpainting
-    
+
     Step 1: Text Detection with EasyOCR
     - Initialize EasyOCR Reader (downloads models on first run)
     - Detect text regions with bounding boxes
     - Get confidence scores for each detection
-    
+
     Step 2: Mask Creation
     - Create binary mask (white = text, black = background)
     - Draw filled polygons for each detected text box
     - Dilate mask by 3 pixels to cover edges
-    
+
     Step 3: Text Removal
     - Method A: White fill (fast, clean result)
       image[mask == 255] = 255
-    
+
     - Method B: Inpainting (slower, natural result)
       cv2.inpaint(image, mask, radius=7, cv2.INPAINT_TELEA)
-    
+
     Result: Clean architectural drawing without text
     """
 ```
@@ -188,6 +196,7 @@ def remove_text_easyocr(image_path, output_path):
 - **GPU**: Disabled (CPU-only for stability)
 
 **Processing Flow**:
+
 1. Load image with OpenCV
 2. Initialize EasyOCR reader (cached globally)
 3. Detect text regions: `reader.readtext(image)`
@@ -197,6 +206,7 @@ def remove_text_easyocr(image_path, output_path):
 7. Save cleaned image
 
 **Configuration**:
+
 ```python
 MASK_DILATION = 3           # Expand mask by 3 pixels
 USE_WHITE_FILL = True       # True = white, False = inpaint
@@ -205,16 +215,19 @@ TWO_PASS = False            # Single pass sufficient
 ```
 
 **Performance**:
+
 - First run: ~10 seconds (model initialization)
 - Subsequent runs: ~2-5 seconds per image
 - Memory: ~500MB (model) + image size
 
 **Error Handling**:
+
 - Large images (>5000x5000) downscaled automatically
 - Missing model auto-downloads from EasyOCR servers
 - Falls back to original image if OCR fails
 
 **Command Line Usage**:
+
 ```bash
 # Single file
 python3 remove_text_ocr.py input.png output_cleaned.png
@@ -224,6 +237,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 ```
 
 **When to Use**:
+
 - ✅ Remove dimension labels
 - ✅ Remove room names
 - ✅ Remove annotations
@@ -239,6 +253,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 **Endpoint**: `GET /health`
 
 **Response**:
+
 ```json
 {
   "status": "ok",
@@ -253,10 +268,12 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 **Endpoint**: `POST /upload`
 
 **Request**: `multipart/form-data`
+
 - `file1`: First architectural drawing (PDF/PNG/JPG)
 - `file2`: Second architectural drawing (PDF/PNG/JPG)
 
 **Response**:
+
 ```json
 {
   "job_id": "3f4210fb-aa0c-4457-95cd-19df1d5fb05d",
@@ -266,6 +283,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 ```
 
 **Error Response**:
+
 ```json
 {
   "error": "Both file1 and file2 are required"
@@ -273,6 +291,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 ```
 
 **Status Codes**:
+
 - `200`: Success
 - `400`: Invalid request (missing files, wrong format)
 - `413`: File too large (>50MB)
@@ -285,6 +304,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 **Endpoint**: `GET /status/<job_id>`
 
 **Response** (Processing):
+
 ```json
 {
   "job_id": "3f4210fb-aa0c-4457-95cd-19df1d5fb05d",
@@ -297,6 +317,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 ```
 
 **Response** (Complete):
+
 ```json
 {
   "job_id": "3f4210fb-aa0c-4457-95cd-19df1d5fb05d",
@@ -311,6 +332,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 ```
 
 **Progress Steps**:
+
 - 0-20%: Uploading and validation
 - 20-30%: Preparing files
 - 30-60%: Text removal (if enabled)
@@ -324,12 +346,14 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 **Endpoint**: `GET /image/<job_id>/<file_num>`
 
 **Parameters**:
+
 - `job_id`: Job identifier from upload
 - `file_num`: `1` or `2` for first/second file
 
 **Response**: PNG image file
 
 **Example**:
+
 ```
 GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 ```
@@ -341,6 +365,7 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 **Endpoint**: `DELETE /cleanup/<job_id>`
 
 **Response**:
+
 ```json
 {
   "message": "Cleanup successful"
@@ -354,6 +379,7 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 **Endpoint**: `POST /cleanup-all`
 
 **Response**:
+
 ```json
 {
   "message": "All old files cleaned successfully",
@@ -428,11 +454,13 @@ with ThreadPoolExecutor(max_workers=2) as executor:
 Convert all PDFs in a folder to PNG.
 
 **Usage**:
+
 ```bash
 python3 convert_all_pdfs.py input_folder/ output_folder/
 ```
 
 **Features**:
+
 - Batch PDF conversion using Poppler
 - 300 DPI output for high quality
 - Preserves original filenames
@@ -444,6 +472,7 @@ python3 convert_all_pdfs.py input_folder/ output_folder/
 Remove all processed and upload folders.
 
 **Usage**:
+
 ```bash
 python3 cleanup_all.py
 ```
@@ -470,6 +499,7 @@ pdf2image==1.16.3        # PDF conversion
 ### System Requirements
 
 **Poppler**: Required for PDF conversion
+
 ```bash
 # macOS
 brew install poppler
@@ -536,6 +566,7 @@ TEXT_REMOVAL_ENABLED = False         # Disabled by default
 ### Logging
 
 All processing steps logged to console:
+
 ```
 ============================================================
 🚀 ArchiDiff Processing API
@@ -567,15 +598,16 @@ Processing job: 3f4210fb-aa0c-4457-95cd-19df1d5fb05d
 
 ### Processing Speed
 
-| Operation | 1000x1000 | 4000x4000 |
-|-----------|-----------|-----------|
-| PDF → PNG | ~2s | ~5s |
-| Upscale 1.5X | ~0.5s | ~2s |
-| Text Removal | ~3s | ~8s |
+| Operation    | 1000x1000 | 4000x4000 |
+| ------------ | --------- | --------- |
+| PDF → PNG    | ~2s       | ~5s       |
+| Upscale 1.5X | ~0.5s     | ~2s       |
+| Text Removal | ~3s       | ~8s       |
 
 ### Parallel Processing
 
 Text removal runs in parallel using ThreadPoolExecutor:
+
 - 2 workers for 2 files
 - 120s timeout per file
 - Automatic fallback on failure
@@ -597,6 +629,7 @@ Text removal runs in parallel using ThreadPoolExecutor:
 ### Test Mode
 
 Use `test-job` folder for development:
+
 ```
 processed/test-job/
   ├── file1_final.png
@@ -608,6 +641,7 @@ Access directly: `http://localhost:5004/image/test-job/1`
 ### Debugging
 
 Enable Flask debug mode in `processing_api.py`:
+
 ```python
 app.run(host='0.0.0.0', port=5004, debug=True)
 ```
@@ -623,6 +657,7 @@ Flask auto-reloads on file changes in debug mode.
 ### "Poppler not found"
 
 Install Poppler for PDF conversion:
+
 ```bash
 brew install poppler  # macOS
 ```
@@ -630,6 +665,7 @@ brew install poppler  # macOS
 ### "EasyOCR model download failed"
 
 Check internet connection or manually download:
+
 ```bash
 python3 -c "import easyocr; easyocr.Reader(['en'])"
 ```
@@ -643,6 +679,7 @@ python3 -c "import easyocr; easyocr.Reader(['en'])"
 ### "Port 5004 already in use"
 
 Kill existing process:
+
 ```bash
 lsof -ti :5004 | xargs kill -9
 ```

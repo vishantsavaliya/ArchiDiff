@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Processing API - Flask server for ArchiDiff processing pipeline
-Handles: PDF conversion, upscaling, text removal
-Port: 5000
+Handles: PDF conversion, upscaling, text removal, AI analysis
+Port: 5004
 """
 
 import os
@@ -11,11 +11,17 @@ import cv2
 import uuid
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
+from gemini_analyzer import analyze_job_async
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -289,6 +295,15 @@ def process_files(job_id):
         job['current_step'] = 'Processing complete!'
         job['progress'] = 100
         
+        # Start async AI analysis in background (non-blocking)
+        print(f"🤖 Starting background AI analysis...")
+        analysis_thread = threading.Thread(
+            target=analyze_job_async, 
+            args=(job_id, str(OUTPUT_FOLDER))
+        )
+        analysis_thread.daemon = True
+        analysis_thread.start()
+        
     except Exception as e:
         job['status'] = 'failed'
         job['error'] = str(e)
@@ -484,6 +499,39 @@ def cleanup_all():
             'jobs_removed': len(jobs_to_remove)
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get-analysis/<job_id>', methods=['GET'])
+def get_analysis(job_id):
+    """
+    Get cached AI analysis for a job (lightweight)
+    Returns analysis if ready, or status if still processing
+    """
+    try:
+        job_folder = OUTPUT_FOLDER / job_id
+        if not job_folder.exists():
+            return jsonify({'error': 'Job not found'}), 404
+        
+        # Check if analysis file exists
+        analysis_file = job_folder / 'analysis.txt'
+        
+        if analysis_file.exists():
+            summary = analysis_file.read_text()
+            return jsonify({
+                'status': 'ready',
+                'summary': summary,
+                'job_id': job_id
+            })
+        else:
+            # Analysis not ready yet
+            return jsonify({
+                'status': 'processing',
+                'message': 'AI analysis in progress...',
+                'job_id': job_id
+            })
+        
+    except Exception as e:
+        print(f"Error getting analysis: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

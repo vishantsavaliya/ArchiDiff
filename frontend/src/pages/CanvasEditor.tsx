@@ -4,6 +4,18 @@ import { StatusMessage } from '../components/StatusMessage';
 import { imageEditorService, type Layer } from '../services/imageEditorService';
 import { WebGLRenderer } from '../utils/webglRenderer';
 
+// Debounce utility for performance optimization
+const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: NodeJS.Timeout | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
+
 const TEST_MODE = !localStorage.getItem('dashboard_job_id');
 
 export const CanvasEditor: React.FC = () => {
@@ -58,6 +70,13 @@ export const CanvasEditor: React.FC = () => {
   const webglRendererRef = useRef<WebGLRenderer | null>(null);
   const [useWebGL, setUseWebGL] = useState(true);
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1.0 });
+
+  // AI Analysis state
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiExpanded, setAiExpanded] = useState(false);
+  const [summaryPanelOpen, setSummaryPanelOpen] = useState(true);
 
   const jobId = localStorage.getItem('dashboard_job_id') || 'test-job';
   
@@ -413,6 +432,72 @@ export const CanvasEditor: React.FC = () => {
     link.click();
     setMessage({ type: 'success', text: 'Downloaded!' });
   }, []);
+
+  // AI Analysis - Poll for cached analysis result
+  const checkAnalysis = useCallback(async () => {
+    try {
+      const response = await fetch(`http://localhost:5004/get-analysis/${jobId}`);
+      
+      if (!response.ok) {
+        return; // Silently skip if endpoint fails
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'ready' && data.summary) {
+        setAiSummary(data.summary);
+        setAiExpanded(true); // Auto-expand when ready
+        setSummaryPanelOpen(true); // Auto-open panel when ready
+      }
+      // If status is 'processing', we'll check again on next poll
+      
+    } catch (error) {
+      // Silently ignore errors in background polling
+      console.log('Analysis check skipped:', error);
+    }
+  }, [jobId]);
+
+  // Poll for analysis on mount and periodically
+  useEffect(() => {
+    // Stop polling if we already have the summary
+    if (aiSummary) {
+      return;
+    }
+    
+    // Check immediately
+    checkAnalysis();
+    
+    // Then check every 5 seconds until we get a result
+    const interval = setInterval(() => {
+      checkAnalysis();
+    }, 5000);
+    
+    // Clear interval when component unmounts OR when aiSummary is received
+    return () => clearInterval(interval);
+  }, [checkAnalysis, aiSummary]);
+
+  // Manual refresh button (for users who want to trigger it)
+  const analyzeWithAI = useCallback(async () => {
+    setAiAnalyzing(true);
+    setAiError(null);
+    setMessage({ type: 'info', text: 'Checking for analysis...' });
+
+    try {
+      await checkAnalysis();
+      
+      if (!aiSummary) {
+        setMessage({ type: 'info', text: 'Analysis still processing, please wait...' });
+      } else {
+        setMessage({ type: 'success', text: 'Analysis loaded!' });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load analysis';
+      setAiError(errorMessage);
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setAiAnalyzing(false);
+    }
+  }, [checkAnalysis, aiSummary]);
 
   // Mouse dragging handlers with throttled updates
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -915,6 +1000,31 @@ export const CanvasEditor: React.FC = () => {
           <span className="text-xs">Edit</span>
         </button>
         
+        <button
+          onClick={() => {
+            if (aiSummary) {
+              setSummaryPanelOpen(!summaryPanelOpen);
+            } else {
+              analyzeWithAI();
+            }
+          }}
+          disabled={aiAnalyzing}
+          className="w-14 h-14 flex flex-col items-center justify-center rounded-lg hover:bg-gray-800 text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          title={aiSummary ? "Toggle Summary Panel" : "Get AI Analysis"}
+        >
+          {aiAnalyzing ? (
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+          )}
+          <span className="text-xs">Summary</span>
+        </button>
+        
         <div className="flex-1" />
         <button
           onClick={() => navigate('/')}
@@ -1042,7 +1152,7 @@ export const CanvasEditor: React.FC = () => {
                   min="-500"
                   max="500"
                   value={activeLayer.transform.x}
-                  onChange={(e) => updateTransform('x', Number(e.target.value))}
+                  onInput={(e) => updateTransform('x', Number((e.target as HTMLInputElement).value))}
                   className="w-full"
                 />
               </div>
@@ -1057,7 +1167,7 @@ export const CanvasEditor: React.FC = () => {
                   min="-500"
                   max="500"
                   value={activeLayer.transform.y}
-                  onChange={(e) => updateTransform('y', Number(e.target.value))}
+                  onInput={(e) => updateTransform('y', Number((e.target as HTMLInputElement).value))}
                   className="w-full"
                 />
               </div>
@@ -1072,7 +1182,7 @@ export const CanvasEditor: React.FC = () => {
                   min="-180"
                   max="180"
                   value={activeLayer.transform.rotation}
-                  onChange={(e) => updateTransform('rotation', Number(e.target.value))}
+                  onInput={(e) => updateTransform('rotation', Number((e.target as HTMLInputElement).value))}
                   className="w-full"
                 />
               </div>
@@ -1087,7 +1197,7 @@ export const CanvasEditor: React.FC = () => {
                   min="0"
                   max="100"
                   value={activeLayer.transform.opacity * 100}
-                  onChange={(e) => updateTransform('opacity', Number(e.target.value) / 100)}
+                  onInput={(e) => updateTransform('opacity', Number((e.target as HTMLInputElement).value) / 100)}
                   className="w-full"
                 />
               </div>
@@ -1102,7 +1212,7 @@ export const CanvasEditor: React.FC = () => {
                   min="10"
                   max="200"
                   value={activeLayer.transform.scale * 100}
-                  onChange={(e) => updateTransform('scale', Number(e.target.value) / 100)}
+                  onInput={(e) => updateTransform('scale', Number((e.target as HTMLInputElement).value) / 100)}
                   className="w-full"
                 />
               </div>
@@ -1245,7 +1355,38 @@ export const CanvasEditor: React.FC = () => {
             </div>
           </div>
         )}
+
       </div>
+
+      {/* Right Panel - AI Analysis Summary */}
+      {aiSummary && summaryPanelOpen && (
+        <div className="w-80 bg-gray-900 border-l border-gray-700 flex flex-col">
+          <div className="bg-gray-800 px-5 py-4 border-b border-gray-700 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">AI Analysis</h3>
+            <button
+              onClick={() => setSummaryPanelOpen(false)}
+              className="text-gray-400 hover:text-white transition p-1 hover:bg-gray-700 rounded"
+              title="Close panel"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5">
+            <div className="text-sm text-gray-300 leading-relaxed space-y-3">
+              {aiSummary}
+            </div>
+          </div>
+          {aiError && (
+            <div className="p-5 border-t border-gray-700">
+              <div className="p-3 bg-red-900/30 border border-red-700 rounded-lg text-xs text-red-300">
+                {aiError}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

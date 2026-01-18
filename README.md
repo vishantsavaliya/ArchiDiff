@@ -24,18 +24,21 @@ ArchiDiff is a web-based architectural drawing comparison and editing tool desig
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone <repository-url>
 cd ArchiDiff
 ```
 
 2. **Backend Setup**
+
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
 3. **Frontend Setup**
+
 ```bash
 cd frontend
 npm install
@@ -44,21 +47,25 @@ npm install
 ### Running the Application
 
 1. **Start Backend Server** (Terminal 1)
+
 ```bash
 cd backend
 python3 processing_api.py
 ```
+
 Backend will run on `http://localhost:5004`
 
 2. **Start Frontend Server** (Terminal 2)
+
 ```bash
 cd frontend
 npm run dev
 ```
+
 Frontend will run on `http://localhost:5177`
 
 3. **Access the Application**
-Open `http://localhost:5177` in your browser
+   Open `http://localhost:5177` in your browser
 
 ## 📖 How to Use
 
@@ -93,20 +100,26 @@ ArchiDiff/
 ## 🔧 Configuration
 
 ### Backend Port
+
 Edit `processing_api.py`:
+
 ```python
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5004, debug=True)
 ```
 
 ### Frontend API URL
+
 Edit `frontend/src/services/api.ts`:
+
 ```typescript
-const API_BASE_URL = 'http://localhost:5004';
+const API_BASE_URL = "http://localhost:5004";
 ```
 
 ### Canvas Size
+
 Edit `frontend/src/pages/CanvasEditor.tsx`:
+
 ```typescript
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 1200;
@@ -120,12 +133,14 @@ const CANVAS_HEIGHT = 1200;
 ## 🛠️ Technologies
 
 **Backend:**
+
 - Flask - Web framework
 - OpenCV - Image processing
 - EasyOCR - Text detection (optional)
 - Real-ESRGAN - Image upscaling
 
 **Frontend:**
+
 - React 18 - UI framework
 - TypeScript - Type safety
 - Vite - Build tool
