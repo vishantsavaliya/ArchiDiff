@@ -82,6 +82,9 @@ def upload_files():
     file1.save(str(filepath1))
     file2.save(str(filepath2))
     
+    # Get processing options
+    remove_text = request.form.get('remove_text', 'true').lower() == 'true'
+    
     # Initialize job status
     processing_jobs[job_id] = {
         'status': 'queued',
@@ -93,6 +96,7 @@ def upload_files():
         'file2_path': str(filepath2),
         'file1_processed': None,
         'file2_processed': None,
+        'remove_text': remove_text,
         'error': None
     }
     
@@ -192,42 +196,50 @@ def process_files(job_id):
         
         job['progress'] = 15
         
-        # Step 2: Skip text removal for now (disabled)
+        # Step 2: Remove text from images (if enabled)
         job['current_step'] = 'Preparing images...'
         job['progress'] = 20
         
         cleaned1_path = job_output / 'file1_cleaned.png'
         cleaned2_path = job_output / 'file2_cleaned.png'
         
-        # Step 2: Remove text from images (parallel processing)
-        job['current_step'] = 'Removing text from images...'
-        job['progress'] = 30
-        
-        text_removal_tasks = []
-        if not cleaned1_path.exists():
-            text_removal_tasks.append(('file1', file1_path, cleaned1_path))
+        # Check if text removal is enabled
+        if job.get('remove_text', True):
+            job['current_step'] = 'Removing text from images...'
+            job['progress'] = 30
+            
+            text_removal_tasks = []
+            if not cleaned1_path.exists():
+                text_removal_tasks.append(('file1', file1_path, cleaned1_path))
+            else:
+                print(f"Skipping text removal for file1 (already exists)")
+            
+            if not cleaned2_path.exists():
+                text_removal_tasks.append(('file2', file2_path, cleaned2_path))
+            else:
+                print(f"Skipping text removal for file2 (already exists)")
+            
+            if text_removal_tasks:
+                # Process in parallel for faster results
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [executor.submit(remove_text, task[1], task[2]) for task in text_removal_tasks]
+                    for i, future in enumerate(futures):
+                        try:
+                            future.result()
+                            job['progress'] = 30 + (i + 1) * 15  # 30-60%
+                            print(f"Text removal completed for {text_removal_tasks[i][0]}")
+                        except Exception as e:
+                            print(f"Text removal failed for {text_removal_tasks[i][0]}: {e}")
+                            # Fallback: copy original file if text removal fails
+                            shutil.copy2(text_removal_tasks[i][1], text_removal_tasks[i][2])
+                            print(f"Using original file for {text_removal_tasks[i][0]}")
         else:
-            print(f"Skipping text removal for file1 (already exists)")
-        
-        if not cleaned2_path.exists():
-            text_removal_tasks.append(('file2', file2_path, cleaned2_path))
-        else:
-            print(f"Skipping text removal for file2 (already exists)")
-        
-        if text_removal_tasks:
-            # Process in parallel for faster results
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                futures = [executor.submit(remove_text, task[1], task[2]) for task in text_removal_tasks]
-                for i, future in enumerate(futures):
-                    try:
-                        future.result()
-                        job['progress'] = 30 + (i + 1) * 15  # 30-60%
-                        print(f"Text removal completed for {text_removal_tasks[i][0]}")
-                    except Exception as e:
-                        print(f"Text removal failed for {text_removal_tasks[i][0]}: {e}")
-                        # Fallback: copy original file if text removal fails
-                        shutil.copy2(text_removal_tasks[i][1], text_removal_tasks[i][2])
-                        print(f"Using original file for {text_removal_tasks[i][0]}")
+            # Skip text removal - copy original files directly
+            print(f"Text removal disabled, using original images")
+            if not cleaned1_path.exists():
+                shutil.copy2(file1_path, cleaned1_path)
+            if not cleaned2_path.exists():
+                shutil.copy2(file2_path, cleaned2_path)
         
         job['progress'] = 60
         

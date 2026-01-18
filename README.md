@@ -5,13 +5,17 @@ ArchiDiff is a web-based architectural drawing comparison and editing tool desig
 ## 🎯 Features
 
 - **Upload & Process**: Upload two architectural drawings (PDF, PNG, JPG)
+- **Text Removal Toggle**: Optional text annotation removal during preprocessing
 - **Automatic Upscaling**: 1.5X upscaling using bicubic interpolation for better quality
+- **AI Analysis**: Automatic comparison analysis using Gemini 2.5 Flash
 - **Canvas Editor**: Interactive canvas with layer-based editing
 - **Box Erase Tool**: Precise erasing with transform-aware coordinate system
 - **Overlay Comparison**: Compare two drawings with adjustable opacity
 - **Layer Management**: Move, scale, rotate, and adjust opacity of each layer independently
 - **Undo/Redo**: 10-step history for all edits
+- **Summary Panel**: Collapsible AI-generated analysis with close button
 - **Download Results**: Export edited images as PNG
+- **Performance Optimized**: Caching, smart polling, debounced operations
 
 ## 🚀 Quick Start
 
@@ -37,7 +41,14 @@ cd backend
 pip install -r requirements.txt
 ```
 
-3. **Frontend Setup**
+3. **Configure Environment**
+
+Create `backend/.env` file:
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
+
+4. **Frontend Setup**
 
 ```bash
 cd frontend
@@ -70,13 +81,16 @@ Frontend will run on `http://localhost:5177`
 ## 📖 How to Use
 
 1. **Upload Files**: Click "Choose Files" and select two architectural drawings
-2. **Processing**: Files are automatically upscaled 1.5X for better quality
-3. **Canvas Editor**: Opens automatically after processing
-4. **Edit Tools**:
+2. **Text Removal Option**: Check/uncheck "Remove text annotations" before processing
+3. **Processing**: Files are automatically upscaled 1.5X for better quality
+4. **AI Analysis**: Automatic comparison analysis runs in background
+5. **Canvas Editor**: Opens automatically after processing
+6. **Edit Tools**:
    - **Overlay Mode**: Drag to move the active layer, adjust opacity with slider
    - **Edit Mode**: Draw box selections to erase areas
    - **Layer Controls**: Switch between layers, toggle visibility, swap order
-5. **Download**: Click "Download Canvas" to save your edited image
+7. **Summary Button**: Click to view/hide AI-generated analysis in right panel
+8. **Download**: Click "Download Canvas" to save your edited image
 
 ## 🏗️ Architecture
 
@@ -84,8 +98,10 @@ Frontend will run on `http://localhost:5177`
 ArchiDiff/
 ├── backend/          # Flask API server
 │   ├── processing_api.py      # Main API server
+│   ├── gemini_analyzer.py     # AI analysis module
 │   ├── upscale_realesrgan.py  # Image upscaling
 │   ├── remove_text_ocr.py     # Text removal (optional)
+│   ├── .env                   # API keys (not in git)
 │   └── requirements.txt       # Python dependencies
 ├── frontend/         # React TypeScript app
 │   ├── src/

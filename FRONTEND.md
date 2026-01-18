@@ -59,34 +59,38 @@ frontend/src/
 
 ### 1. `Home.tsx` - Upload Page
 
-**Purpose**: File upload interface with real-time processing progress.
+**Purpose**: File upload interface with real-time processing progress and preprocessing options.
 
 **Key Features**:
 
 - Drag-and-drop or click-to-upload interface
 - File validation (PDF, PNG, JPG, max 50MB)
+- **Text removal toggle**: Optional checkbox to enable/disable text annotation removal
 - Real-time progress tracking with emoji icons
 - Automatic redirect to Canvas Editor on completion
 
 **State**:
 
 ```typescript
-const [files, setFiles] = useState<File[]>([]);
-const [uploading, setUploading] = useState(false);
-const [progress, setProgress] = useState(0);
-const [currentStep, setCurrentStep] = useState("");
-const [jobId, setJobId] = useState<string | null>(null);
+const [file1, setFile1] = useState<File | null>(null);
+const [file2, setFile2] = useState<File | null>(null);
+const [removeText, setRemoveText] = useState(true);
+const [processing, setProcessing] = useState(false);
+const [status, setStatus] = useState<ProcessingStatus | null>(null);
+const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
 ```
 
 **Upload Flow**:
 
 ```typescript
 1. User selects 2 files
-2. Validate: size < 50MB, type in [PDF, PNG, JPG]
-3. POST /upload → job_id
-4. Poll GET /status/{job_id} every 500ms
-5. Update progress bar (0-100%)
-6. On complete → navigate to /canvas-editor
+2. User toggles "Remove text annotations" (default: ON)
+3. Validate: size < 50MB, type in [PDF, PNG, JPG]
+4. POST /upload with FormData (file1, file2, remove_text)
+5. Receive job_id
+6. Poll GET /status/{job_id} every 1000ms
+7. Update progress bar (0-100%)
+8. On complete → navigate to /canvas-editor
 ```
 
 **Progress Icons**:
@@ -106,9 +110,9 @@ const [jobId, setJobId] = useState<string | null>(null);
 
 ### 2. `CanvasEditor.tsx` - Main Canvas Editor
 
-**Purpose**: Interactive canvas for comparing and editing two architectural drawings with advanced transform-aware tools.
+**Purpose**: Interactive canvas for comparing and editing two architectural drawings with advanced transform-aware tools and AI analysis.
 
-**File Size**: ~1200 lines  
+**File Size**: ~1380 lines  
 **Canvas Size**: Fixed 1600x1200 pixels (landscape)  
 **Rendering**: Canvas 2D API with memoized render function
 
@@ -126,9 +130,18 @@ const [jobId, setJobId] = useState<string | null>(null);
 
 **Tools**:
 
-1. **Overlay Mode**: Drag to move active layer, adjust opacity
+1. **Overlay Mode**: Drag to move active layer, adjust opacity with debounced sliders
 2. **Edit Mode**: Box erase tool with transform-aware coordinates
-3. **Undo/Redo**: 10-step history for all edits
+3. **Summary Button**: Toggle AI analysis panel (left toolbar)
+4. **Undo/Redo**: 10-step history for all edits
+
+**AI Analysis**:
+
+- Auto-polls for analysis every 5 seconds
+- Displays in collapsible right panel (320px wide)
+- Close button (X) to dismiss panel
+- Summary persists and can be reopened
+- Stops polling when analysis is ready
 
 **State Structure**:
 
@@ -152,6 +165,12 @@ const [editableImages, setEditableImages] =
   useState<Record<number, HTMLCanvasElement>>();
 const [layerOrder, setLayerOrder] = useState<[number, number]>([1, 2]);
 const [currentTool, setCurrentTool] = useState<"overlay" | "edit">("overlay");
+
+// AI Analysis state
+const [aiAnalyzing, setAiAnalyzing] = useState(false);
+const [aiSummary, setAiSummary] = useState<string | null>(null);
+const [aiError, setAiError] = useState<string | null>(null);
+const [summaryPanelOpen, setSummaryPanelOpen] = useState(true);
 ```
 
 #### Coordinate Transform System

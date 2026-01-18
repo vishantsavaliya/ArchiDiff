@@ -20,7 +20,9 @@ The backend is a Flask-based REST API server that handles:
 - File uploads (PDF, PNG, JPG)
 - PDF to PNG conversion
 - Image upscaling (1.5X using bicubic interpolation)
-- Optional text removal (using EasyOCR)
+- Optional text removal (using EasyOCR) with user toggle
+- AI-powered comparison analysis (using Gemini 2.5 Flash)
+- Async background processing with caching
 - Processed image serving
 
 **Port**: `5004`  
@@ -33,14 +35,20 @@ The backend is a Flask-based REST API server that handles:
 ```
 backend/
 ├── processing_api.py          # Main Flask API server
+├── gemini_analyzer.py         # AI analysis module (Gemini)
 ├── upscale_realesrgan.py      # Image upscaling module
 ├── remove_text_ocr.py         # Text removal using EasyOCR
 ├── convert_all_pdfs.py        # Batch PDF converter
 ├── cleanup_all.py             # Storage cleanup utility
+├── .env                       # Environment variables (API keys)
 ├── requirements.txt           # Python dependencies
 ├── uploads/                   # Temporary upload storage
 ├── processed/                 # Processed image output
-│   └── test-job/             # Test images for development
+│   ├── {job_id}/
+│   │   ├── file1_final.png     # Processed image 1
+│   │   ├── file2_final.png     # Processed image 2
+│   │   └── analysis.txt        # Cached AI analysis
+│   └── test-job/              # Test images for development
 └── converted/                 # PDF conversion output
 ```
 
@@ -93,7 +101,78 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
 ---
 
-### 2. `upscale_realesrgan.py` - Image Upscaling
+### 2. `gemini_analyzer.py` - AI Analysis Module
+
+**Purpose**: Lightweight async AI analysis using Gemini 2.5 Flash to compare architectural drawings.
+
+**Key Features**:
+
+- Async background processing (non-blocking)
+- Image resizing to 1024px before API call (reduces payload)
+- Caching: skips analysis if `analysis.txt` already exists
+- Focused architectural analysis prompt
+- Saves results to file for reuse
+
+**Configuration**:
+
+```python
+GEMINI_API_KEY=your_api_key_here  # Required in .env
+model = 'gemini-2.5-flash'        # Fast, cost-effective
+max_dimension = 1024               # Resize images for API
+```
+
+**Main Class**:
+
+```python
+class GeminiAnalyzer:
+    def __init__(self):
+        # Load API key and configure model
+    
+    def resize_for_api(self, image_path, max_dimension=1024):
+        # Resize image to reduce payload size
+    
+    def analyze_images(self, image1_path, image2_path):
+        # Send to Gemini and get comparison analysis
+    
+    def analyze_from_job(self, job_folder):
+        # Analyze from job folder paths
+```
+
+**Async Function**:
+
+```python
+def analyze_job_async(job_id, output_folder):
+    # Background thread function
+    # 1. Check if analysis.txt exists (caching)
+    # 2. Wait for images to be processed
+    # 3. Perform analysis
+    # 4. Save to analysis.txt
+```
+
+**Analysis Prompt**:
+
+- Focus on physical build differences
+- Identify wall layers, framing, materials
+- Ignore text/labels unless they affect build
+- Brief 1-2 paragraph summary
+
+**Caching Strategy**:
+
+```python
+if analysis_file.exists():
+    return analysis_file.read_text()  # Skip API call
+```
+
+**Performance**:
+
+- Image resize: ~100ms
+- Gemini API call: 2-5 seconds
+- Total: ~3-6 seconds per job
+- Cached retrieval: <1ms
+
+---
+
+### 3. `upscale_realesrgan.py` - Image Upscaling
 
 **Purpose**: Upscale architectural drawings for better quality and detail.
 
@@ -271,6 +350,7 @@ python3 remove_text_ocr.py input_folder/ output_folder/
 
 - `file1`: First architectural drawing (PDF/PNG/JPG)
 - `file2`: Second architectural drawing (PDF/PNG/JPG)
+- `remove_text`: Optional boolean (`"true"` or `"false"`, default: `"true"`)
 
 **Response**:
 
@@ -360,7 +440,40 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 
 ---
 
-### 5. Cleanup Job Files
+### 5. Get AI Analysis
+
+**Endpoint**: `GET /get-analysis/<job_id>`
+
+**Response** (Ready):
+
+```json
+{
+  "status": "ready",
+  "summary": "The main difference between these drawings...",
+  "job_id": "3f4210fb-aa0c-4457-95cd-19df1d5fb05d"
+}
+```
+
+**Response** (Processing):
+
+```json
+{
+  "status": "processing",
+  "message": "AI analysis in progress...",
+  "job_id": "3f4210fb-aa0c-4457-95cd-19df1d5fb05d"
+}
+```
+
+**Features**:
+
+- Lightweight GET request (reads cached `analysis.txt`)
+- No image data transferred
+- Returns instantly if analysis exists
+- Non-blocking: frontend polls until ready
+
+---
+
+### 6. Cleanup Job Files
 
 **Endpoint**: `DELETE /cleanup/<job_id>`
 
@@ -374,7 +487,7 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 
 ---
 
-### 6. Cleanup All Old Files
+### 7. Cleanup All Old Files
 
 **Endpoint**: `POST /cleanup-all`
 
@@ -397,7 +510,7 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
 
 ```
 ┌─────────────────┐
-│  Upload Files   │ (file1, file2)
+│  Upload Files   │ (file1, file2, remove_text option)
 └────────┬────────┘
          │
          ▼
@@ -417,23 +530,32 @@ GET /image/3f4210fb-aa0c-4457-95cd-19df1d5fb05d/1
          │
          ▼
 ┌─────────────────┐
+│  Text Removal   │ (if enabled, use EasyOCR)
+│   (Optional)    │ (else copy original)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
 │ Upscale 1.5X    │ (bicubic interpolation)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ Remove Text     │ (optional, EasyOCR)
+│  Save Output    │ (processed/{job_id}/)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Save Output    │ (processed/{job_id}/)
+│  AI Analysis    │ (async background)
+│   (Gemini)      │ (saves to analysis.txt)
 └─────────────────┘
 ```
 
 ### Parallel Processing
 
-Files are processed sequentially but text removal can run in parallel:
+Files are processed sequentially but certain steps run in parallel:
+
+**Text Removal** (if enabled):
 
 ```python
 with ThreadPoolExecutor(max_workers=2) as executor:
@@ -444,6 +566,33 @@ with ThreadPoolExecutor(max_workers=2) as executor:
     for future in futures:
         future.result(timeout=120)  # 2 minute timeout
 ```
+
+**AI Analysis** (async background):
+
+```python
+analysis_thread = threading.Thread(
+    target=analyze_job_async, 
+    args=(job_id, str(OUTPUT_FOLDER))
+)
+analysis_thread.daemon = True
+analysis_thread.start()  # Non-blocking
+```
+
+### Performance Optimizations
+
+**Caching**:
+- Analysis results cached to `analysis.txt`
+- Skip analysis if file already exists
+- Instant retrieval on subsequent requests
+
+**Debouncing**:
+- Slider operations use `onInput` instead of `onChange`
+- Reduces render calls during dragging
+
+**Smart Polling**:
+- Frontend polls every 5 seconds
+- Stops automatically when analysis ready
+- Prevents unnecessary API calls
 
 ---
 

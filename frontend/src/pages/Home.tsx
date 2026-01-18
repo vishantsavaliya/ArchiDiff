@@ -21,6 +21,7 @@ export const Home: React.FC = () => {
   const navigate = useNavigate();
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
+  const [removeText, setRemoveText] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [status, setStatus] = useState<ProcessingStatus | null>(null);
   const [message, setMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
@@ -57,6 +58,7 @@ export const Home: React.FC = () => {
     const formData = new FormData();
     formData.append('file1', file1);
     formData.append('file2', file2);
+    formData.append('remove_text', removeText.toString());
 
     try {
       setProcessing(true);
@@ -169,6 +171,26 @@ export const Home: React.FC = () => {
                     <p className="text-sm font-medium">✓ {file2.name}</p>
                   </div>
                 )}
+              </div>
+
+              {/* Text Removal Toggle */}
+              <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={removeText}
+                    onChange={(e) => setRemoveText(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer"
+                  />
+                  <div className="ml-3">
+                    <span className="text-base font-medium text-gray-900 dark:text-white">
+                      Remove text annotations
+                    </span>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Clean drawings by removing text labels during preprocessing
+                    </p>
+                  </div>
+                </label>
               </div>
 
               <button
